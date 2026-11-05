@@ -2,12 +2,13 @@
 import type { Job } from '../contracts/jobs.js';
 import { JobStore } from '../storage/jobs.js';
 import type { DatabaseHandle } from '../storage/database.js';
+import { randomUUID } from 'node:crypto';
 
 export class Coordinator {
   constructor(private store: JobStore) {}
   static fromDb(db: DatabaseHandle): Coordinator { return new Coordinator(new JobStore(db)); }
   enqueue(input: { goal: string; origin: string; scopeIds?: string[] }): string {
-    const id = 'job_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const id = 'job_' + randomUUID();
     const job: Job = {
       id,
       origin: input.origin,
