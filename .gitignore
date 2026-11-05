@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+secrets/
+native/**/bin/
+native/**/obj/
+tests/e2e/.cache/
+coverage/
