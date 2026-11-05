@@ -1,1 +1,15 @@
-namespace Fairy.Evaluator { public static class Program { public static int Main() { Console.WriteLine("Fairy.Evaluator placeholder (T17)."); return 0; } } }
+using System;
+using Fairy.Evaluator;
+
+namespace Fairy.Evaluator;
+
+public static class Program
+{
+    public static int Main(string[] args)
+    {
+        var g = new UpgradeGate();
+        Console.WriteLine("manifest check (safe): " + g.CheckManifest("c1", new[]{"read","write"}));
+        Console.WriteLine("manifest check (grant-change): " + g.CheckManifest("c2", new[]{"grant-change"}));
+        return 0;
+    }
+}
