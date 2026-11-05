@@ -7,6 +7,8 @@ public static class Program
 {
     public static int Main(string[] args)
     {
-        return PolicyTests.Run();
+        if (PolicyTests.Run() != 0) return 1;
+        if (SandboxTests.Run() != 0) return 1;
+        return 0;
     }
 }
