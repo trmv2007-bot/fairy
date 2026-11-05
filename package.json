@@ -11,26 +11,10 @@
     "test:unit": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.config.ts tests/integration",
     "test:security": "vitest run --config vitest.config.ts tests/security",
-    "test:e2e": "echo \"e2e harness not yet wired (T02)\" && exit 0",
+    "test:e2e": "playwright test",
     "dev": "electron ."
   },
   "engines": {
     "node": ">=24.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.19.2",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.2.1",
-    "electron": "^45.2.3",
-    "electron-builder": "^26.18.0",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.6",
-    "vitest": "^5.1.0"
-  },
-  "dependencies": {
-    "better-sqlite3": "^13.0.3",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
   }
 }
