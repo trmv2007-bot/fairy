@@ -46,16 +46,19 @@ public sealed class PolicyBroker
     public bool TryConsume(string nonce, string capabilityId, string target, string effect, string payloadDigest, string uiStateHash)
     {
         if (!_approvals.TryGetValue(nonce, out var a)) return false;
-        if (a.Used) return false;
-        if (a.CapabilityId != capabilityId) return false;
-        if (a.Target != target) return false;
-        if (a.Effect != effect) return false;
-        if (a.PayloadDigest != payloadDigest) return false;
-        if (a.UiStateHash != uiStateHash) return false;
-        if (DateTimeOffset.UtcNow > a.ExpiresAt) return false;
-        if (_revoked.ContainsKey(nonce)) return false;
-        a.Used = true;
-        return true;
+        lock (a)
+        {
+            if (a.Used) return false;
+            if (a.CapabilityId != capabilityId) return false;
+            if (a.Target != target) return false;
+            if (a.Effect != effect) return false;
+            if (a.PayloadDigest != payloadDigest) return false;
+            if (a.UiStateHash != uiStateHash) return false;
+            if (DateTimeOffset.UtcNow > a.ExpiresAt) return false;
+            if (_revoked.ContainsKey(nonce)) return false;
+            a.Used = true;
+            return true;
+        }
     }
 
     public void Revoke(string nonce) => _revoked[nonce] = DateTimeOffset.UtcNow;
