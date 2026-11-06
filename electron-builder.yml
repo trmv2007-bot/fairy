@@ -1,0 +1,14 @@
+appId: com.fairy.assistant
+productName: Fairy
+directories:
+  output: release
+  buildResources: build
+win:
+  target: nsis
+  artifactName: Fairy-Setup-${version}.exe
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+files:
+  - dist/**/*
+  - package.json

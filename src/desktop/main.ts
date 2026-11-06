@@ -1,7 +1,9 @@
-// Electron main process (T02). Shell scaffold with orb window.
-import { app, BrowserWindow } from 'electron';
+// Electron main process (T02/T30). Shell + settings + orb window.
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SettingsStore } from '../storage/settings.js';
+import { loadConfig } from '../providers/config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,9 +31,14 @@ export function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
-export function getMainWindow(): BrowserWindow | null {
-  return mainWindow;
-}
+export function getMainWindow(): BrowserWindow | null { return mainWindow; }
+
+// IPC: settings load/save (user configures providers themselves)
+const settingsPath = path.join(app.getPath('userData'), 'fairy-config.json');
+const settingsStore = new SettingsStore(settingsPath);
+
+ipcMain.handle('settings:load', () => settingsStore.load());
+ipcMain.handle('settings:save', (_e, cfg) => { settingsStore.save(loadConfig(cfg)); return true; });
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   app.whenReady().then(createWindow);
