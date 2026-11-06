@@ -28,7 +28,7 @@ export function createWindow(): BrowserWindow {
     minHeight: 520,
     show: false,
     title: 'Fairy',
-    backgroundColor: '#0b1120',
+    backgroundColor: '#04070a',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

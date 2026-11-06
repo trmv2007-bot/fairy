@@ -26,16 +26,18 @@ export function Panel({ open, onClose, children }: PanelProps): React.ReactEleme
         position: 'fixed',
         top: 0,
         right: 0,
-        width: 360,
+        width: 380,
         height: '100vh',
-        background: '#0f172a',
-        color: '#e2e8f0',
+        boxSizing: 'border-box',
+        background: 'rgba(7, 14, 10, 0.97)',
+        color: 'var(--f-text)',
+        borderLeft: '1px solid var(--f-line)',
+        boxShadow: '-1px 0 0 rgba(61,255,156,0.35), -10px 0 36px rgba(0,0,0,0.6)',
         padding: 16,
-        boxShadow: '-4px 0 24px rgba(0,0,0,0.4)',
         overflow: 'auto',
       }}
     >
-      <button type="button" onClick={onClose} aria-label="Close panel" style={{ float: 'right' }}>
+      <button type="button" onClick={onClose} aria-label="Close panel" className="f-btn" style={{ float: 'right', padding: '2px 8px' }}>
         ×
       </button>
       {children}

@@ -8,6 +8,120 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fairy</title>
+    <style>
+      /* ── Fairy system theme (ZZZ-inspired holographic HUD) ─────────────── */
+      :root {
+        --f-bg0: #04070a;
+        --f-bg1: #0a1410;
+        --f-bg2: #0f1c16;
+        --f-line: #1c3829;
+        --f-green: #3dff9c;
+        --f-green-dim: #6fcfa1;
+        --f-cyan: #3fd9ff;
+        --f-text: #d9efe3;
+        --f-muted: #71907f;
+        --f-danger: #ff4d6d;
+        --f-warn: #ffc44d;
+        --f-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'JetBrains Mono', Menlo, monospace;
+      }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        color: var(--f-text);
+        background:
+          radial-gradient(1100px 620px at 18% -10%, rgba(61, 255, 156, 0.07), transparent 60%),
+          radial-gradient(900px 520px at 110% 112%, rgba(63, 217, 255, 0.06), transparent 60%),
+          var(--f-bg0);
+      }
+      /* CRT scanlines + slow sweep, the Fairy terminal feel */
+      body::after {
+        content: '';
+        position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+        background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.20) 0 1px, transparent 1px 3px);
+        opacity: 0.55;
+      }
+      body::before {
+        content: '';
+        position: fixed; left: 0; right: 0; top: -120px; height: 110px;
+        z-index: 9998; pointer-events: none;
+        background: linear-gradient(180deg, transparent, rgba(61, 255, 156, 0.05), transparent);
+        animation: f-sweep 9s linear infinite;
+      }
+      @keyframes f-sweep { to { transform: translateY(calc(100vh + 240px)); } }
+
+      /* HUD corner brackets */
+      .hud-corners {
+        background-image:
+          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green)),
+          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green)),
+          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green)),
+          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green));
+        background-repeat: no-repeat;
+        background-size: 16px 2px, 2px 16px, 16px 2px, 2px 16px, 16px 2px, 2px 16px, 16px 2px, 2px 16px;
+        background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+      }
+
+      /* HUD buttons */
+      .f-btn {
+        font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+        background: transparent; color: var(--f-green-dim);
+        border: 1px solid var(--f-line); padding: 5px 12px; cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+      }
+      .f-btn:hover { border-color: var(--f-green); color: var(--f-green); }
+      .f-btn:disabled { opacity: 0.4; cursor: default; }
+      .f-btn-active { background: rgba(61, 255, 156, 0.12); border-color: var(--f-green); color: var(--f-green); }
+      .f-btn-primary { background: rgba(61, 255, 156, 0.14); border: 1px solid var(--f-green); color: var(--f-green); }
+      .f-btn-primary:hover { background: rgba(61, 255, 156, 0.26); }
+
+      /* Inputs */
+      .f-input {
+        width: 100%; box-sizing: border-box; background: #0c1512; color: var(--f-text);
+        border: 1px solid var(--f-line); padding: 7px 9px; font-size: 13px; outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .f-input:focus {
+        border-color: var(--f-green);
+        box-shadow: 0 0 0 1px rgba(61, 255, 156, 0.35), 0 0 12px rgba(61, 255, 156, 0.15);
+      }
+      .f-input::placeholder { color: #4e635a; }
+      textarea.f-input { resize: none; font-family: inherit; }
+      input[type='checkbox'], input[type='radio'] { accent-color: var(--f-green); }
+
+      /* Readout rows + labels */
+      .f-label {
+        font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.18em;
+        text-transform: uppercase; color: var(--f-muted);
+      }
+      .f-row {
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        padding: 8px 10px; background: var(--f-bg2); border: 1px solid var(--f-line);
+        border-left: 2px solid var(--f-green-dim); margin-bottom: 6px;
+      }
+      .f-glow { color: var(--f-green); text-shadow: 0 0 8px rgba(61, 255, 156, 0.55); }
+      .f-heading {
+        font-family: var(--f-mono); font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
+        color: var(--f-green); margin: 14px 0 6px;
+      }
+
+      /* Orb eye pupil: blinks; faster while processing/executing */
+      .f-pupil { animation: f-blink 4.2s ease-in-out infinite; }
+      .f-pupil-fast { animation-duration: 1.1s; }
+      @keyframes f-blink {
+        0%, 92%, 100% { transform: translate(-50%, -50%) scale(1, 1); }
+        95% { transform: translate(-50%, -50%) scale(1.15, 0.08); }
+      }
+
+      /* Typing indicator dots */
+      .f-dot { display: inline-block; animation: f-fade 1s infinite; margin-left: 2px; }
+      @keyframes f-fade { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #1c3829; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #2a5240; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

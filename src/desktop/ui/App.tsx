@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Orb } from './Orb.js';
+import { Orb, STATE_LABELS } from './Orb.js';
 import { Panel } from './Panel.js';
 import { Chat } from './Chat.js';
 import { SettingsPanel } from '../settings-ui.js';
@@ -8,12 +8,17 @@ import type { PersistedConfigWire, SaveProviderPayload } from '../bridge.js';
 type OrbState = 'idle' | 'listening' | 'thinking' | 'working' | 'approval-needed' | 'paused' | 'error';
 type Tab = 'chat' | 'status' | 'providers';
 
-const sectionStyle: React.CSSProperties = { marginTop: 12 };
-const rowStyle: React.CSSProperties = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  gap: 8, padding: '6px 8px', background: '#1e293b', borderRadius: 4, marginBottom: 6,
+const rowStyle: React.CSSProperties = { marginBottom: 6 };
+
+const STATE_COLORS: Record<OrbState, string> = {
+  idle: 'var(--f-green)',
+  listening: '#4ade80',
+  thinking: 'var(--f-warn)',
+  working: 'var(--f-cyan)',
+  'approval-needed': 'var(--f-danger)',
+  paused: '#93a89c',
+  error: 'var(--f-danger)',
 };
-const btnStyle: React.CSSProperties = { cursor: 'pointer' };
 
 const RUNTIME_STATES: OrbState[] = ['idle', 'thinking', 'working', 'error'];
 
@@ -47,7 +52,7 @@ export function App(): React.ReactElement {
     try {
       const res = await window.fairy.settings.saveProvider(payload);
       if (res.config) setConfig(res.config);
-      setNotice(res.ok ? `saved '${payload.endpointId}'` : (res.error ?? 'save failed'));
+      setNotice(res.ok ? `registered '${payload.endpointId}'` : (res.error ?? 'save failed'));
     } catch (err) {
       setNotice(`save failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -76,16 +81,28 @@ export function App(): React.ReactElement {
   }, []);
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', color: '#e2e8f0', padding: 12 }}>
-      <Orb state={state} onClick={() => setOpen(true)} />
+    <div style={{ padding: 14, minHeight: '100vh', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <Orb state={state} onClick={() => setOpen(true)} />
+        <div>
+          <div className="f-glow" style={{ fontFamily: 'var(--f-mono)', fontSize: 22, letterSpacing: '0.34em', lineHeight: 1.1 }}>
+            FAIRY
+          </div>
+          <div className="f-label" style={{ marginTop: 4 }}>
+            {STATE_LABELS[state]} · tap the eye to open
+          </div>
+        </div>
+      </div>
       <Panel open={open} onClose={() => setOpen(false)}>
         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
-          <h2 style={{ margin: 0 }}>Fairy</h2>
-          <p style={{ margin: '0 0 8px', color: '#94a3b8' }}>Strong, dry, competent.</p>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <button type="button" style={btnStyle} onClick={() => setTab('chat')}>Chat</button>
-            <button type="button" style={btnStyle} onClick={() => setTab('status')}>Status</button>
-            <button type="button" style={btnStyle} onClick={() => setTab('providers')}>Providers</button>
+          <h2 className="f-glow" style={{ margin: 0, fontFamily: 'var(--f-mono)', fontSize: 20, letterSpacing: '0.3em' }}>
+            Fairy
+          </h2>
+          <p className="f-label" style={{ margin: '4px 0 10px' }}>System intelligence · dry · competent · mildly judgmental</p>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <button type="button" className={tab === 'chat' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('chat')}>Chat</button>
+            <button type="button" className={tab === 'status' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('status')}>Status</button>
+            <button type="button" className={tab === 'providers' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('providers')}>Providers</button>
           </div>
           {tab === 'chat' && (
             <Chat
@@ -96,34 +113,37 @@ export function App(): React.ReactElement {
           )}
           {tab === 'status' && (
             <div>
-              <div style={rowStyle}>
-                <span>Assistant state</span>
-                <strong>{state}</strong>
+              <div className="f-row" style={rowStyle}>
+                <span className="f-label">Assistant state</span>
+                <strong style={{ color: STATE_COLORS[state] }}>{STATE_LABELS[state]}</strong>
               </div>
-              <div style={rowStyle}>
-                <span>Native broker (optional)</span>
-                <strong>{brokerOnline ? 'online' : 'offline'}</strong>
+              <div className="f-row" style={rowStyle}>
+                <span className="f-label">Native broker (optional)</span>
+                <strong style={{ color: brokerOnline ? 'var(--f-green)' : 'var(--f-muted)' }}>
+                  {brokerOnline ? 'online' : 'offline'}
+                </strong>
               </div>
-              <div style={rowStyle}>
-                <span>Providers configured</span>
+              <div className="f-row" style={rowStyle}>
+                <span className="f-label">Providers configured</span>
                 <strong>{config?.cloudProviders.length ?? 0}</strong>
               </div>
-              <button type="button" style={btnStyle} onClick={() => setState('paused')}>Pause all</button>
-              {' '}
-              <button type="button" style={btnStyle} onClick={() => setState('idle')}>Resume</button>
-              <p style={{ color: '#64748b', fontSize: 12, ...sectionStyle }}>
-                Chat runs through the configured cloud route under the zero-additional-spend
-                policy. Observation, connectors and job workers activate per scope as they
-                come online. Nothing runs while paused.
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="button" className="f-btn" onClick={() => setState('paused')}>Suspend operations</button>
+                <button type="button" className="f-btn" onClick={() => setState('idle')}>Resume</button>
+              </div>
+              <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
+                Everything routes through your configured cloud provider under the
+                zero-additional-spend policy — Fairy does not spend money you did not
+                explicitly authorize. Suspended means suspended: nothing runs.
               </p>
             </div>
           )}
           {tab === 'providers' && (
             <div>
-              <h3 style={{ marginBottom: 4 }}>Cloud providers</h3>
+              <div className="f-heading" style={{ marginTop: 0 }}>Cloud providers</div>
               {(config?.cloudProviders ?? []).map(p => (
-                <div key={p.endpointId} style={rowStyle}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div key={p.endpointId} className="f-row" style={rowStyle}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <input
                       type="radio"
                       name="selected-provider"
@@ -133,26 +153,33 @@ export function App(): React.ReactElement {
                     <span>
                       <strong>{p.endpointId}</strong>
                       <br />
-                      <span style={{ color: '#64748b', fontSize: 12 }}>
+                      <span style={{ color: 'var(--f-muted)', fontSize: 12 }}>
                         {p.baseUrl} · {p.model ?? 'default model'} · {p.keyPresent ? 'key vaulted' : 'no key this session'}
                       </span>
                     </span>
                   </label>
-                  <button type="button" style={btnStyle} onClick={() => void onDeleteProvider(p.endpointId)}>✕</button>
+                  <button
+                    type="button"
+                    className="f-btn"
+                    aria-label={`Remove provider ${p.endpointId}`}
+                    onClick={() => void onDeleteProvider(p.endpointId)}
+                    style={{ color: 'var(--f-danger)', borderColor: 'var(--f-line)', padding: '2px 8px' }}
+                  >✕</button>
                 </div>
               ))}
               {(config?.cloudProviders ?? []).length === 0 && (
-                <p style={{ color: '#64748b' }}>No providers configured yet.</p>
+                <p style={{ color: 'var(--f-muted)' }}>No providers registered yet.</p>
               )}
-              <h3 style={{ marginBottom: 4 }}>Add provider</h3>
+              <div className="f-heading">Add provider</div>
               <SettingsPanel onSave={(p) => void onSaveProvider(p)} saving={saving} />
-              <p style={{ color: '#64748b', fontSize: 12, ...sectionStyle }}>
-                Keys are encrypted by the OS (DPAPI/keychain) and never stored in plain text;
-                the persisted config stores opaque handles only.
+              <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
+                Keys are encrypted by the OS (DPAPI/keychain) and never stored in plain
+                text; the persisted config keeps opaque handles only. Your keys stay
+                yours — Fairy merely remembers them.
               </p>
             </div>
           )}
-          {notice && <p style={{ color: '#fbbf24' }}>{notice}</p>}
+          {notice && <p style={{ color: 'var(--f-warn)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>{notice}</p>}
         </div>
       </Panel>
     </div>

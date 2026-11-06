@@ -11,10 +11,11 @@ export interface ChatProps {
 const rowSelf: React.CSSProperties = {
   alignSelf: 'flex-end',
   maxWidth: '85%',
-  background: '#1d4ed8',
-  color: '#eef2ff',
-  padding: '8px 10px',
-  borderRadius: 10,
+  background: 'rgba(63, 217, 255, 0.10)',
+  border: '1px solid rgba(63, 217, 255, 0.35)',
+  color: '#dff6ff',
+  padding: '7px 10px',
+  borderRadius: 8,
   borderBottomRightRadius: 2,
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
@@ -24,29 +25,26 @@ const rowSelf: React.CSSProperties = {
 const rowOther: React.CSSProperties = {
   alignSelf: 'flex-start',
   maxWidth: '85%',
-  background: '#1e293b',
-  color: '#e2e8f0',
-  padding: '8px 10px',
-  borderRadius: 10,
+  background: 'var(--f-bg2)',
+  border: '1px solid var(--f-line)',
+  borderLeft: '2px solid var(--f-green)',
+  color: 'var(--f-text)',
+  padding: '7px 10px',
+  borderRadius: 8,
   borderBottomLeftRadius: 2,
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   fontSize: 13,
   lineHeight: 1.45,
 };
-const inputStyle: React.CSSProperties = {
-  flex: 1,
-  resize: 'none',
-  background: '#1e293b',
-  border: '1px solid #334155',
-  borderRadius: 6,
-  color: '#e2e8f0',
-  padding: '8px 10px',
-  fontFamily: 'inherit',
-  fontSize: 13,
-  boxSizing: 'border-box',
+const bubbleTag: React.CSSProperties = {
+  fontFamily: 'var(--f-mono)',
+  fontSize: 9,
+  letterSpacing: '0.2em',
+  textTransform: 'uppercase',
+  opacity: 0.65,
+  marginBottom: 3,
 };
-const btnStyle: React.CSSProperties = { cursor: 'pointer' };
 
 export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps): React.ReactElement {
   const [messages, setMessages] = useState<ChatMessageWire[]>([]);
@@ -111,11 +109,11 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Chat</h3>
-        <span style={{ color: '#64748b', fontSize: 11 }}>
+        <div className="f-heading" style={{ margin: 0 }}>Chat</div>
+        <span className="f-label">
           broker: {brokerOnline ? 'online' : 'offline (optional)'}
         </span>
-        <button type="button" style={btnStyle} onClick={() => void clear()} disabled={streaming}>
+        <button type="button" className="f-btn" onClick={() => void clear()} disabled={streaming}>
           Clear
         </button>
       </div>
@@ -131,39 +129,52 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
         }}
       >
         {messages.length === 0 && !hasProvider && (
-          <div style={{ margin: 'auto', textAlign: 'center', color: '#94a3b8', maxWidth: 280 }}>
-            <p style={{ fontWeight: 600, color: '#e2e8f0' }}>No cloud provider configured yet</p>
-            <p style={{ fontSize: 13 }}>
-              Add a provider (endpoint, base URL, API key) and start chatting. Keys are
-              encrypted by the OS and never written in plain text.
+          <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--f-muted)', maxWidth: 290 }}>
+            <p className="f-glow" style={{ fontFamily: 'var(--f-mono)', letterSpacing: '0.12em', margin: '0 0 8px' }}>
+              FAIRY ONLINE
             </p>
-            <button type="button" style={btnStyle} onClick={onOpenProviders}>
+            <p style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--f-text)' }}>
+              No cloud provider configured, Master. Add one — endpoint, base URL, API
+              key — and I will be at your service.
+            </p>
+            <button type="button" className="f-btn f-btn-primary" onClick={onOpenProviders}>
               Open Providers
             </button>
           </div>
         )}
         {messages.length === 0 && hasProvider && (
-          <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
-            Say hello. Conversation stays on this device.
+          <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--f-muted)', fontSize: 13 }}>
+            Awaiting instructions, Master. This conversation never leaves this device.
           </div>
         )}
         {messages.map(m => (
           <div key={m.id} style={m.role === 'user' ? rowSelf : rowOther}>
+            <div style={bubbleTag}>{m.role === 'user' ? 'Operator' : 'Fairy'}</div>
             {m.content}
           </div>
         ))}
         {streaming && (
-          <div style={{ alignSelf: 'flex-start', color: '#64748b', fontSize: 12 }}>Fairy is typing…</div>
+          <div style={{ alignSelf: 'flex-start', color: 'var(--f-muted)', fontSize: 12, fontFamily: 'var(--f-mono)' }}>
+            Processing
+            <span className="f-dot" style={{ animationDelay: '0s' }}>▮</span>
+            <span className="f-dot" style={{ animationDelay: '0.2s' }}>▮</span>
+            <span className="f-dot" style={{ animationDelay: '0.4s' }}>▮</span>
+          </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {error && <p style={{ color: '#fbbf24', margin: 0, fontSize: 12 }}>{error}</p>}
+      {error && (
+        <p style={{ color: 'var(--f-danger)', fontFamily: 'var(--f-mono)', fontSize: 11, margin: 0 }}>
+          {error}
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
         <textarea
           ref={inputRef}
-          style={inputStyle}
+          className="f-input"
+          style={{ flex: 1, fontFamily: 'inherit' }}
           rows={2}
           value={input}
           placeholder={hasProvider ? 'Message Fairy… (Enter to send)' : 'Configure a provider first'}
@@ -171,7 +182,12 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
           onKeyDown={onKeyDown}
           disabled={streaming || !hasProvider}
         />
-        <button type="button" style={btnStyle} onClick={() => void send()} disabled={streaming || input.trim().length === 0}>
+        <button
+          type="button"
+          className="f-btn f-btn-primary"
+          onClick={() => void send()}
+          disabled={streaming || input.trim().length === 0}
+        >
           {streaming ? '…' : 'Send'}
         </button>
       </div>

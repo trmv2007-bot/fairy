@@ -31,40 +31,36 @@ export function formToPayload(form: ProviderForm): SaveProviderPayload {
   };
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '6px 8px',
-  boxSizing: 'border-box',
-  background: '#1e293b',
-  border: '1px solid #334155',
-  borderRadius: 4,
-  color: '#e2e8f0',
-};
-
 export function SettingsPanel({ onSave, saving }: { onSave: (p: SaveProviderPayload) => void; saving?: boolean }): React.ReactElement {
   const [form, setForm] = useState<ProviderForm>({ ...EMPTY_FORM });
   const set = (patch: Partial<ProviderForm>) => setForm(f => ({ ...f, ...patch }));
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSave(formToPayload(form)); }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <label>Provider id
-        <input style={inputStyle} value={form.endpointId} placeholder="openai" onChange={e => set({ endpointId: e.target.value })} />
-      </label>
-      <label>Base URL
-        <input style={inputStyle} value={form.baseUrl} placeholder="https://api.openai.com/v1" onChange={e => set({ baseUrl: e.target.value })} />
-      </label>
-      <label>API key (encrypted by the OS and restored automatically on next launch)
-        <input style={inputStyle} type="password" value={form.apiKey} onChange={e => set({ apiKey: e.target.value })} />
-      </label>
-      <label>Model (optional)
-        <input style={inputStyle} value={form.model} placeholder="gpt-4o-mini" onChange={e => set({ model: e.target.value })} />
+    <form onSubmit={(e) => { e.preventDefault(); onSave(formToPayload(form)); }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label>
+        <span className="f-label">Provider id</span>
+        <input className="f-input" style={{ marginTop: 3 }} value={form.endpointId} placeholder="openai" onChange={e => set({ endpointId: e.target.value })} />
       </label>
       <label>
-        <input type="checkbox" checked={form.includedCost} onChange={e => set({ includedCost: e.target.checked })} /> Included cost (zero additional spend) — tick to enable chat on this provider
+        <span className="f-label">Base URL</span>
+        <input className="f-input" style={{ marginTop: 3 }} value={form.baseUrl} placeholder="https://api.openai.com/v1" onChange={e => set({ baseUrl: e.target.value })} />
       </label>
-      <label>Allowed data scopes (comma)
-        <input style={inputStyle} value={form.allowedDataScopes} onChange={e => set({ allowedDataScopes: e.target.value })} />
+      <label>
+        <span className="f-label">API key (encrypted by the OS, restored on next launch)</span>
+        <input className="f-input" style={{ marginTop: 3 }} type="password" value={form.apiKey} onChange={e => set({ apiKey: e.target.value })} />
       </label>
-      <button type="submit" disabled={saving === true}>Save provider</button>
+      <label>
+        <span className="f-label">Model (optional)</span>
+        <input className="f-input" style={{ marginTop: 3 }} value={form.model} placeholder="gpt-4o-mini" onChange={e => set({ model: e.target.value })} />
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+        <input type="checkbox" checked={form.includedCost} onChange={e => set({ includedCost: e.target.checked })} />
+        <span>Included cost (zero additional spend) — tick to enable chat on this provider</span>
+      </label>
+      <label>
+        <span className="f-label">Allowed data scopes (comma)</span>
+        <input className="f-input" style={{ marginTop: 3 }} value={form.allowedDataScopes} onChange={e => set({ allowedDataScopes: e.target.value })} />
+      </label>
+      <button type="submit" className="f-btn f-btn-primary" disabled={saving === true}>Save provider</button>
     </form>
   );
 }
