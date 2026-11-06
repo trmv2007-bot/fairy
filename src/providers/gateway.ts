@@ -52,6 +52,36 @@ export class ModelGateway {
   }
 
   /**
+   * When `selectFor` returns null, explain WHY no route matched, per provider, so
+   * the user sees exactly which knob (included-cost tick, scopes, vision) to turn
+   * in the Providers tab instead of a bare "no eligible route".
+   */
+  routeBlockReason(dataScopes: string[], needsVision: boolean): string | null {
+    if (this.providers.size === 0) {
+      return 'no provider configured — add one in the Providers tab';
+    }
+    const reasons: string[] = [];
+    for (const p of this.providers.values()) {
+      if (needsVision && p.cfg.supportsVision !== true) {
+        reasons.push(`'${p.cfg.endpointId}' is not vision-capable`);
+        continue;
+      }
+      if (!p.cfg.includedCost) {
+        reasons.push(`'${p.cfg.endpointId}' is not marked included-cost (tick 'Included cost' in Providers to allow chat on this key)`);
+        continue;
+      }
+      const missing = dataScopes.filter(s => !p.cfg.allowedDataScopes.includes(s));
+      if (missing.length > 0) {
+        reasons.push(`'${p.cfg.endpointId}' does not allow data scope(s) ${missing.join(', ')} (add them under Allowed data scopes in Providers)`);
+        continue;
+      }
+      // Fully eligible by the same predicate selectFor uses — no block exists.
+      return null;
+    }
+    return reasons.join('; ');
+  }
+
+  /**
    * One-call completion: routes to an eligible provider and resolves its key from
    * the configured SecretResolver (main-process vault / broker handle).
    */
@@ -70,7 +100,12 @@ export class ModelGateway {
     onChunk?: (delta: string) => void,
   ): Promise<CloudCompletion> {
     const provider = this.selectFor(dataScopes, needsVision);
-    if (!provider) throw new CloudRouteError('no eligible cloud route for request (cost/capability/scope)');
+    if (!provider) {
+      const reason = this.routeBlockReason(dataScopes, needsVision);
+      throw new CloudRouteError(
+        `no eligible cloud route for request (cost/capability/scope)${reason ? `: ${reason}` : ''}`,
+      );
+    }
     if (!this.secretResolver) throw new CloudRouteError('gateway has no secret resolver configured');
     const apiKey = this.secretResolver(provider.cfg.authHandle);
     if (!apiKey) throw new CloudRouteError(`no key in vault for provider '${provider.cfg.endpointId}'`);

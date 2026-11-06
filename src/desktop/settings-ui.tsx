@@ -1,5 +1,6 @@
 // Settings UI (React) — lets the user add cloud providers. The API key is handed to
-// the main-process vault via the typed bridge; it is never persisted to disk.
+// the main-process vault via the typed bridge; it is encrypted by the OS
+// (DPAPI/keychain) and persisted, so it survives restarts.
 import React, { useState } from 'react';
 import type { SaveProviderPayload } from './bridge.js';
 
@@ -12,8 +13,10 @@ export interface ProviderForm {
   allowedDataScopes: string; // comma-separated text field
 }
 
+// Default scopes must cover what chat actually requests ('public', 'internal') —
+// otherwise a freshly added provider can never route and chat fails for new users.
 export const EMPTY_FORM: ProviderForm = {
-  endpointId: '', baseUrl: '', apiKey: '', model: '', includedCost: false, allowedDataScopes: 'public',
+  endpointId: '', baseUrl: '', apiKey: '', model: '', includedCost: false, allowedDataScopes: 'public, internal',
 };
 
 export function formToPayload(form: ProviderForm): SaveProviderPayload {
@@ -49,14 +52,14 @@ export function SettingsPanel({ onSave, saving }: { onSave: (p: SaveProviderPayl
       <label>Base URL
         <input style={inputStyle} value={form.baseUrl} placeholder="https://api.openai.com/v1" onChange={e => set({ baseUrl: e.target.value })} />
       </label>
-      <label>API key (held in memory for this session; never written to disk)
+      <label>API key (encrypted by the OS and restored automatically on next launch)
         <input style={inputStyle} type="password" value={form.apiKey} onChange={e => set({ apiKey: e.target.value })} />
       </label>
       <label>Model (optional)
         <input style={inputStyle} value={form.model} placeholder="gpt-4o-mini" onChange={e => set({ model: e.target.value })} />
       </label>
       <label>
-        <input type="checkbox" checked={form.includedCost} onChange={e => set({ includedCost: e.target.checked })} /> Included cost (zero additional spend)
+        <input type="checkbox" checked={form.includedCost} onChange={e => set({ includedCost: e.target.checked })} /> Included cost (zero additional spend) — tick to enable chat on this provider
       </label>
       <label>Allowed data scopes (comma)
         <input style={inputStyle} value={form.allowedDataScopes} onChange={e => set({ allowedDataScopes: e.target.value })} />

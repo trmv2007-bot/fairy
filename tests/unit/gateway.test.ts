@@ -83,3 +83,39 @@ describe('ModelGateway.selectFor', () => {
     expect(gw.descriptor('nope')).toBeNull();
   });
 });
+
+describe('ModelGateway.routeBlockReason + actionable chat errors', () => {
+  it('explains a missing provider', () => {
+    const gw = new ModelGateway(cfg([]));
+    expect(gw.routeBlockReason(['public'], false)).toMatch(/no provider configured/);
+  });
+
+  it('points at the included-cost tick when that is the only blocker', () => {
+    const gw = new ModelGateway(cfg([provider({ includedCost: false })]));
+    const reason = gw.routeBlockReason(['public', 'internal'], false);
+    expect(reason).toMatch(/not marked included-cost/);
+    expect(reason).toMatch(/Providers/);
+  });
+
+  it('names the missing data scopes instead of failing vaguely', () => {
+    const gw = new ModelGateway(cfg([provider({ allowedDataScopes: ['public'] })]));
+    const reason = gw.routeBlockReason(['public', 'internal'], false);
+    expect(reason).toMatch(/does not allow data scope\(s\) internal/);
+  });
+
+  it('reports vision capability gaps as the reason', () => {
+    const gw = new ModelGateway(cfg([provider({})]));
+    expect(gw.routeBlockReason(['public'], true)).toMatch(/not vision-capable/);
+  });
+
+  it('returns null when a route actually exists', () => {
+    const gw = new ModelGateway(cfg([provider({})]));
+    expect(gw.routeBlockReason(['public', 'internal'], false)).toBeNull();
+  });
+
+  it('chat() failure message names the exact blocker', async () => {
+    const gw = new ModelGateway(cfg([provider({ includedCost: false })]), () => 'sk-test');
+    await expect(gw.chat([{ role: 'user', content: 'hi' }], ['public', 'internal']))
+      .rejects.toThrow(/no eligible cloud route.*not marked included-cost/);
+  });
+});

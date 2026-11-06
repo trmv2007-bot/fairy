@@ -97,6 +97,12 @@ the OS and persisted so it survives restarts — the on-disk config keeps opaque
 handles only. Without OS key storage (Linux without a keyring), keys stay
 session-only by design: no plain-text fallback exists.
 
+**New-user tip:** chat only routes to providers marked **Included cost**
+(zero-additional-spend policy). The add-provider form defaults the data scopes
+to `public, internal` — exactly what chat requests — so ticking "Included cost"
+is all it takes for the first message to work. If a route is blocked, the error
+names the exact provider and the knob to turn.
+
 **Cloud-only mode (user directive):** local models are disabled at the registry
 level; enabling one throws. `includedCost` providers only — zero additional
 spend is encoded in the cloud route.
