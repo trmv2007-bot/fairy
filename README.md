@@ -2,41 +2,48 @@
 
 Proactive Windows desktop assistant (Electron + TS + React + SQLite + .NET 8 broker).
 
-> **Status: early scaffold.** The desktop shell, settings management, provider
-> vaulting, and the native policy/sandbox/egress/credential/recovery components
-> are real and tested. The assistant runtime (chat loop, job workers, live
-> connectors, observation) is scaffolded but not yet wired into the running app —
-> see [Roadmap](#roadmap) and `fairyplan.md` for the full spec.
+## What works today
+
+- **Chat** — streaming conversations with your configured cloud provider through the
+  zero-additional-spend gateway; conversation lives in the main process, deltas stream
+  over the typed sandboxed bridge, and the orb reflects live state.
+- **Provider management** — add/select/delete providers in the panel; API keys are
+  encrypted by the OS (DPAPI on Windows) in `fairy-keys.json` and survive restarts.
+  Raw keys never touch disk in plain text, in any file.
+- **Native broker** (optional) — a .NET named-pipe host exposing policy approvals,
+  path-jail resolution, egress checks and the fail-closed upgrade gate over JSON lines.
+  The app degrades gracefully when it is not running (Status tab shows offline).
+- **Git connector** — real local repo read operations (status/log/diff) via a
+  fixed-arg-vector `execFile` (no shell), with an injectable runner for tests.
+
+Scaffolded but not yet wired into the running app: job workers, observation loops,
+remaining connectors, skills runtime. See `fairyplan.md` for the full spec.
 
 ## Architecture
 
 ```
 ┌─ Electron main (Node) ──────────────────────────────────────────────┐
-│ src/desktop/main.ts      shell, single-instance lock, settings IPC  │
-│   ├─ src/storage/settings.ts       fairy-config.json (0600)         │
-│   ├─ src/providers/config.ts       validate + normalize + strip     │
-│   └─ src/providers/secret-vault.ts in-memory handle → key map      │
-│   └─ preload.cts → preload.cjs  contextBridge: typed settings only │
+│ src/desktop/main.ts      shell, settings IPC, chat IPC, broker probe│
+│   ├─ src/desktop/chat.ts       conversation + streaming + journal   │
+│   ├─ src/providers/gateway.ts  routing by cost/scope/vision         │
+│   ├─ src/providers/cloud.ts    OpenAI-compatible client (SSE + JSON)│
+│   ├─ src/providers/persisted-key-store.ts  OS-encrypted key file    │
+│   ├─ src/storage/*             fairy.db journal + config store      │
+│   └─ preload.cts → preload.cjs  contextBridge: typed settings+chat  │
 ├─ Renderer (sandboxed, no Node) ─────────────────────────────────────┤
-│ src/desktop/ui/  App.tsx (Orb + Panel) · settings-ui.tsx            │
-├─ Library layers (tested, wiring pending) ───────────────────────────┤
-│ src/providers/gateway.ts   model routing by cost/scope/vision       │
-│ src/storage/{database,journal,memory,jobs}.ts  SQLite + FTS5        │
-│ src/runtime/coordinator.ts job state machine + crash recovery       │
-│ src/skills/* · src/connectors/* · src/observation/* · src/evolution/* │
-├─ Native (.NET 8) ───────────────────────────────────────────────────┤
-│ Fairy.Broker     policy (one-use approvals), path sandbox, egress   │
-│                  provenance, DPAPI credential host                  │
-│ Fairy.Evaluator  fail-closed upgrade gate                          │
-│ Fairy.Recovery   state rollback                                     │
+│ src/desktop/ui/  App.tsx · Chat.tsx · Orb.tsx · Panel · settings    │
+├─ Native client ─────────────────────────────────────────────────────┤
+│ src/native/broker-client.ts    JSON-line protocol over named pipe   │
+│ native/Fairy.Broker            BrokerHost + pipe server (see below) │
+│ native/Fairy.Evaluator         fail-closed upgrade gate             │
+│ native/Fairy.Recovery          state rollback                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-Security invariants enforced today: sandboxed renderer (no Node), strict CSP,
-navigation/`window.open`/webview lockdown, raw API keys never touch disk
-(vaulted in memory for the session; persisted config stores opaque `cred_`
-handles), secret-shaped fields stripped again before every persist, and the
-native evaluator/upgrader fails closed.
+Security invariants: sandboxed renderer (no Node), strict CSP, navigation/
+`window.open`/webview/permission lockdown, keys only ever cross the bridge as
+opaque `cred_` handles, secret-shaped fields stripped before every persist, and
+the native evaluator/upgrader fails closed.
 
 ## Run (dev, Windows)
 
@@ -54,24 +61,41 @@ npm run dev:ui              # terminal 1
 npm run dev                 # terminal 2
 ```
 
+## Run the native broker (optional)
+
+```powershell
+dotnet build native/Fairy.Broker/Fairy.Broker.csproj -c Release
+dotnet run --project native/Fairy.Broker/Fairy.Broker.csproj
+```
+
+Leave it running; the desktop app detects it on the `fairy-broker` pipe
+(`\\.\pipe\fairy-broker` on Windows) and flips the Status-tab indicator to
+**online**. Protocol: newline-delimited JSON — `{id, op, payload}` in,
+`{id, ok, result | error}` out; ops: `ping`, `sandbox.resolve`, `egress.check`,
+`policy.issue`, `policy.consume`.
+
 ## Test
 
 ```powershell
 npm test              # typecheck + unit + integration + security
 npm run test:e2e      # drives the built app via Playwright + Electron
+                      # (Linux CI: xvfb-run -a npm run test:e2e)
 npm run test:native   # dotnet run --project native/Fairy.Tests/Fairy.Tests.csproj
 ```
 
-The native suite covers policy approvals, path-jail escapes, egress provenance
-(including fail-closed parents and cycles), recovery, and the fail-closed
-upgrade gate. CI runs both tracks (`.github/workflows/ci.yml`).
+The e2e suite spins up a local mock LLM (OpenAI-compatible SSE) and drives a full
+streaming chat round trip through the real UI — no network, no real key. The
+native suite covers policy approvals, path-jail escapes, egress provenance
+(fail-closed parents and cycles), recovery, the upgrade gate and the broker host
+protocol. CI runs both tracks (`.github/workflows/ci.yml`).
 
 ## Configuration
 
 Copy `.env.example` to `.env` for optional first-run seeding and the dev URL.
-Providers are added in the app's **Providers** panel; the API key is vaulted in
-the main process for the session and never persisted — the on-disk config keeps
-opaque handles only.
+Providers are added in the app's **Providers** panel; the API key is encrypted by
+the OS and persisted so it survives restarts — the on-disk config keeps opaque
+handles only. Without OS key storage (Linux without a keyring), keys stay
+session-only by design: no plain-text fallback exists.
 
 **Cloud-only mode (user directive):** local models are disabled at the registry
 level; enabling one throws. `includedCost` providers only — zero additional
@@ -89,13 +113,13 @@ better-sqlite3 loads correctly in the packaged app.
 
 ## Roadmap
 
-The `OVERNIGHT_REPORT.md` tracks the last build sprint; `fairyplan.md` is the
+`OVERNIGHT_REPORT.md` tracks the build sprints; `fairyplan.md` is the
 authoritative spec. Next milestones:
 
-1. Live cloud route proof (T08) with a real provider key
-2. Wire the gateway + coordinator into the shell (chat surface, job workers)
-3. First live connector (T19+), native broker host loop, DPAPI-backed key persistence
-4. Daily-use packaging (T30) after live proofs
+1. Wire the coordinator + scheduler into the shell (proactive jobs, approvals UI)
+2. First live connector surface (git connector is implemented and tested)
+3. Broker-enforced approvals on mutating skills, DPAPI via broker CredentialHost
+4. Daily-use packaging (T30) hardening after live proofs
 
 ## Notes
 

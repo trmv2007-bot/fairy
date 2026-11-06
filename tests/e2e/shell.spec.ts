@@ -1,9 +1,17 @@
 // Real Electron e2e (T02): launches the built app via Playwright's Electron support
 // and drives the actual UI. Requires `npm run build` first (dist/desktop + dist/ui).
+// Each run gets an isolated userData dir — shared state would leak between runs.
 import { test, expect, _electron as electron } from '@playwright/test';
+import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+function freshUserData(): string {
+  return mkdtempSync(join(tmpdir(), 'fairy-e2e-shell-'));
+}
 
 test('shell opens, orb renders, panel + settings flow work', async () => {
-  const app = await electron.launch({ args: ['.'] });
+  const app = await electron.launch({ args: ['.', `--user-data-dir=${freshUserData()}`] });
   const window = await app.firstWindow();
 
   // orb button renders
@@ -17,7 +25,7 @@ test('shell opens, orb renders, panel + settings flow work', async () => {
   await expect(dialog.getByRole('heading', { name: 'Fairy' })).toBeVisible();
 
   // switch to providers tab, add a provider, expect it listed
-  await dialog.getByRole('button', { name: 'Providers' }).click();
+  await dialog.getByRole('button', { name: 'Providers', exact: true }).click();
   await dialog.getByText('No providers configured yet.').waitFor();
 
   await dialog.locator('label:has-text("Provider id") input').fill('test-provider');
@@ -28,12 +36,11 @@ test('shell opens, orb renders, panel + settings flow work', async () => {
   await expect(dialog.getByText(/test-provider/).first()).toBeVisible();
   await expect(dialog.getByText('key vaulted')).toBeVisible();
 
-  // persisted config must not contain the raw key
-  const configOnDisk = await app.evaluate(async ({ app }) => {
-    const { readFileSync } = await import('node:fs');
-    const path = app.getPath('userData') + '/fairy-config.json';
-    try { return readFileSync(path, 'utf8'); } catch { return ''; }
-  });
+  // persisted config must not contain the raw key (read from the test process —
+  // dynamic import inside app.evaluate is not supported on this Node/Electron combo)
+  const userData = await app.evaluate(({ app }) => app.getPath('userData'));
+  const configPath = join(userData, 'fairy-config.json');
+  const configOnDisk = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
   expect(configOnDisk).not.toContain('sk-e2e-test-key');
 
   await app.close();

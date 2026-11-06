@@ -1,14 +1,20 @@
-// Electron main process (T02/T30). Shell + settings + orb window.
+// Electron main process (T02/T30). Shell + settings + chat + orb window.
 // Renderer is fully sandboxed: contextIsolation on, nodeIntegration off, preload
 // exposes exactly the typed surface in bridge.ts — nothing else.
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { SettingsStore } from '../storage/settings.js';
+import { openDatabase } from '../storage/database.js';
+import { EventJournalImpl } from '../storage/journal.js';
 import { loadConfig, sanitizeProvider } from '../providers/config.js';
 import { SecretVault } from '../providers/secret-vault.js';
-import type { PersistedConfigWire, ProviderWire, SettingsResult } from './bridge.js';
+import { PersistedKeyStore, type KeyCodec } from '../providers/persisted-key-store.js';
+import { ModelGateway } from '../providers/gateway.js';
+import { ChatService } from './chat.js';
+import { BrokerClient, BrokerClientError } from '../native/broker-client.js';
+import type { BrokerStateEvent, ChatChunkEvent, PersistedConfigWire, ProviderWire, RuntimeStateEvent, SettingsResult } from './bridge.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -16,8 +22,8 @@ let mainWindow: BrowserWindow | null = null;
 
 export function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 760,
+    width: 520,
+    height: 780,
     minWidth: 360,
     minHeight: 520,
     show: false,
@@ -70,12 +76,76 @@ app.on('web-contents-created', (_event, contents) => {
 
 export function getMainWindow(): BrowserWindow | null { return mainWindow; }
 
-// IPC: settings load/save. Keys entered in the UI are vaulted in the main process for
-// the session only; the persisted config keeps opaque handles exclusively.
+function broadcast(channel: string, payload: unknown): void {
+  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  win?.webContents.send(channel, payload);
+}
+
+// ── Stores ──────────────────────────────────────────────────────────────────
 const settingsPath = path.join(app.getPath('userData'), 'fairy-config.json');
 const settingsStore = new SettingsStore(settingsPath);
 const vault = new SecretVault();
 
+// OS-backed key persistence (DPAPI on Windows). safeStorage needs the app ready,
+// so restore happens in whenReady; the store file is read-only metadata before that.
+const keyCodec: KeyCodec = {
+  get available(): boolean {
+    try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
+  },
+  encrypt: (plain) => safeStorage.encryptString(plain),
+  decrypt: (blob) => safeStorage.decryptString(blob),
+};
+const keyStore = new PersistedKeyStore(path.join(app.getPath('userData'), 'fairy-keys.json'), keyCodec);
+
+// Journal (best effort): chat + lifecycle events land in SQLite when available.
+let journal: EventJournalImpl | null = null;
+try {
+  journal = new EventJournalImpl(openDatabase(path.join(app.getPath('userData'), 'fairy.db')));
+} catch (err) {
+  console.error('[fairy] journal unavailable (chat still works):', err);
+}
+
+// ── Gateway + chat ──────────────────────────────────────────────────────────
+let gateway: ModelGateway | null = null;
+
+function rebuildGateway(): void {
+  const cfg = settingsStore.load();
+  gateway = cfg.cloudProviders.length > 0
+    ? new ModelGateway(cfg, (handle) => vault.resolve(handle))
+    : null;
+}
+rebuildGateway();
+
+const chatService = new ChatService(
+  () => gateway,
+  journal,
+  {
+    onChunk: (messageId, delta) => broadcast('chat:chunk', { messageId, delta } satisfies ChatChunkEvent),
+    onState: (state) => broadcast('runtime:state', { state } satisfies RuntimeStateEvent),
+  },
+);
+
+// ── Broker (optional native component) ──────────────────────────────────────
+let brokerOnline = false;
+const broker = new BrokerClient({ pipeName: 'fairy-broker', timeoutMs: 2_000 });
+
+async function probeBroker(): Promise<void> {
+  const wasOnline = brokerOnline;
+  try {
+    await broker.ping();
+    brokerOnline = true;
+  } catch (err) {
+    brokerOnline = false;
+    if (process.env.FAIRY_DEBUG) {
+      console.error('[fairy] broker offline:', err instanceof BrokerClientError ? err.message : err);
+    }
+  }
+  if (brokerOnline !== wasOnline) {
+    broadcast('broker:state', { online: brokerOnline } satisfies BrokerStateEvent);
+  }
+}
+
+// ── Settings IPC ────────────────────────────────────────────────────────────
 function toWire(cfg: ReturnType<typeof loadConfig>): PersistedConfigWire {
   return {
     cloudProviders: cfg.cloudProviders.map((p): ProviderWire => ({
@@ -124,7 +194,19 @@ ipcMain.handle('settings:saveProvider', (_event, raw: unknown): SettingsResult =
     p.authHandle = handle;
     // Key replacement: drop the orphaned previous handle so the vault cannot grow
     // unboundedly across edits.
-    if (existing && existing.authHandle !== '') vault.remove(existing.authHandle);
+    if (existing && existing.authHandle !== '') {
+      vault.remove(existing.authHandle);
+      keyStore.removeKey(existing.authHandle);
+    }
+    // Persist encrypted at rest (DPAPI/keychain). If the OS key storage is missing,
+    // keep session-only and continue — saving the provider must not fail for this.
+    try {
+      keyStore.setKey(handle, apiKey);
+      keyStore.flush();
+    } catch (err) {
+      console.error('[fairy] key persistence unavailable, key stays session-only:',
+        err instanceof Error ? err.message : err);
+    }
   } else if (existing) {
     p.authHandle = existing.authHandle;
   } else {
@@ -139,6 +221,7 @@ ipcMain.handle('settings:saveProvider', (_event, raw: unknown): SettingsResult =
   } catch (err) {
     return { ok: false, error: `persist failed: ${err instanceof Error ? err.message : String(err)}` };
   }
+  rebuildGateway();
   return { ok: true, config: toWire(cfg) };
 });
 
@@ -148,10 +231,15 @@ ipcMain.handle('settings:deleteProvider', (_event, raw: unknown): SettingsResult
   try {
     const cfg = settingsStore.load();
     const victim = cfg.cloudProviders.find(c => c.endpointId === id);
-    if (victim && victim.authHandle !== '') vault.remove(victim.authHandle);
+    if (victim && victim.authHandle !== '') {
+      vault.remove(victim.authHandle);
+      keyStore.removeKey(victim.authHandle);
+      try { keyStore.flush(); } catch { /* best effort */ }
+    }
     const next = { ...cfg, cloudProviders: cfg.cloudProviders.filter(c => c.endpointId !== id) };
     if (next.selectedProviderId === id) delete next.selectedProviderId;
     settingsStore.save(next);
+    rebuildGateway();
     return { ok: true, config: toWire(next) };
   } catch (err) {
     return { ok: false, error: `delete failed: ${err instanceof Error ? err.message : String(err)}` };
@@ -170,9 +258,31 @@ ipcMain.handle('settings:selectProvider', (_event, raw: unknown): SettingsResult
       return { ok: false, error: 'unknown provider id' };
     }
     settingsStore.save(cfg);
+    rebuildGateway();
     return { ok: true, config: toWire(cfg) };
   } catch (err) {
     return { ok: false, error: `select failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+});
+
+// ── Chat IPC ────────────────────────────────────────────────────────────────
+ipcMain.handle('chat:send', async (_event, raw: unknown): Promise<{ ok: boolean; error?: string; message?: { id: string; role: 'assistant'; content: string }; model?: string }> => {
+  if (typeof raw !== 'string') return { ok: false, error: 'invalid message payload' };
+  if (chatService.isRunning) return { ok: false, error: 'a request is already in flight' };
+  try {
+    const result = await chatService.send(raw);
+    return { ok: true, message: { id: result.messageId, role: 'assistant', content: result.content }, model: result.model };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('chat:clear', (): { ok: boolean; error?: string } => {
+  try {
+    chatService.clear();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 });
 
@@ -186,6 +296,12 @@ function seedProviderFromEnv(): void {
   if (cfg.cloudProviders.some(c => c.endpointId === endpointId)) return;
   const handle = 'cred_' + randomUUID();
   vault.store(handle, apiKey);
+  try {
+    keyStore.setKey(handle, apiKey);
+    keyStore.flush();
+  } catch (err) {
+    console.error('[fairy] seeded key stays session-only:', err instanceof Error ? err.message : err);
+  }
   cfg.cloudProviders = [
     ...cfg.cloudProviders,
     {
@@ -200,6 +316,7 @@ function seedProviderFromEnv(): void {
     },
   ];
   settingsStore.save(cfg);
+  rebuildGateway();
 }
 
 // Single-instance lock: a proactive assistant must not run twice against one state dir.
@@ -215,12 +332,17 @@ if (!gotLock) {
   });
   app.whenReady().then(() => {
     try {
+      // Restore persisted keys into the session vault (OS-decrypted).
+      const restored = keyStore.loadInto((handle, key) => vault.store(handle, key));
+      if (restored > 0) console.log(`[fairy] restored ${restored} key(s) from OS-encrypted storage`);
       seedProviderFromEnv();
+      rebuildGateway();
     } catch (err) {
       // A bad seed must never take down startup — the user can configure via UI.
       console.error('[fairy] provider seeding failed:', err);
     }
     createWindow();
+    void probeBroker();
   }).catch((err: unknown) => {
     console.error('[fairy] startup failed:', err);
     dialog.showErrorBox('Fairy failed to start', err instanceof Error ? err.message : String(err));

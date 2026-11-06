@@ -12,6 +12,7 @@ public static class Program
         if (EgressTests.Run() != 0) return 1;
         if (RecoveryTests.Run() != 0) return 1;
         if (UpgradeTests.Run() != 0) return 1;
+        if (HostTests.Run() != 0) return 1;
         return 0;
     }
 }

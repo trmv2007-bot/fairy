@@ -1,7 +1,7 @@
 // Model gateway (T08): normalizes provider capabilities, routing, privacy/cost checks.
 import type { ProviderDescriptor } from '../contracts/providers.js';
 import { CloudProvider, CloudRouteError } from './cloud.js';
-import type { CloudCompletion, CloudProviderConfig } from './cloud.js';
+import type { CloudChatMessage, CloudCompletion, CloudProviderConfig } from './cloud.js';
 import type { FairyConfig } from './config.js';
 
 export type SecretResolver = (handle: string) => string | undefined;
@@ -56,12 +56,26 @@ export class ModelGateway {
    * the configured SecretResolver (main-process vault / broker handle).
    */
   async complete(prompt: string, dataScopes: string[], needsVision = false): Promise<CloudCompletion> {
+    return this.chat([{ role: 'user', content: prompt }], dataScopes, needsVision);
+  }
+
+  /**
+   * Message-list chat through the routed provider. When `onChunk` is supplied the
+   * request streams and every text delta is passed to it as it arrives.
+   */
+  async chat(
+    messages: CloudChatMessage[],
+    dataScopes: string[],
+    needsVision = false,
+    onChunk?: (delta: string) => void,
+  ): Promise<CloudCompletion> {
     const provider = this.selectFor(dataScopes, needsVision);
     if (!provider) throw new CloudRouteError('no eligible cloud route for request (cost/capability/scope)');
     if (!this.secretResolver) throw new CloudRouteError('gateway has no secret resolver configured');
     const apiKey = this.secretResolver(provider.cfg.authHandle);
     if (!apiKey) throw new CloudRouteError(`no key in vault for provider '${provider.cfg.endpointId}'`);
-    return provider.complete(prompt, { apiKey });
+    if (onChunk) return provider.chatStream(messages, { apiKey }, onChunk);
+    return provider.chat(messages, { apiKey });
   }
 
   descriptor(id: string): ProviderDescriptor | null {
@@ -70,7 +84,7 @@ export class ModelGateway {
     return {
       endpointId: p.cfg.endpointId,
       modelId: p.cfg.model ?? 'default',
-      capabilities: { text: true, tools: false, vision: p.cfg.supportsVision === true, streaming: false },
+      capabilities: { text: true, tools: false, vision: p.cfg.supportsVision === true, streaming: true },
       contextLimit: 8_000, // conservative default until per-connection discovery (T08 follow-up)
       authHandle: p.cfg.authHandle,
       allowedDataScopes: [...p.cfg.allowedDataScopes],

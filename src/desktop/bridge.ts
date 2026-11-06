@@ -36,6 +36,40 @@ export interface SettingsResult {
   config?: PersistedConfigWire;
 }
 
+// ── Chat ────────────────────────────────────────────────────────────────────
+
+export interface ChatMessageWire {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatChunkEvent {
+  messageId: string;
+  delta: string;
+}
+
+export interface RuntimeStateEvent {
+  state: 'idle' | 'thinking' | 'working' | 'error' | 'paused';
+}
+
+export interface BrokerStateEvent {
+  online: boolean;
+}
+
+export interface ChatSendResult {
+  ok: boolean;
+  error?: string;
+  /** Final assistant message (absent on error). */
+  message?: ChatMessageWire;
+  model?: string;
+}
+
+export interface SimpleResult {
+  ok: boolean;
+  error?: string;
+}
+
 export interface FairyBridge {
   settings: {
     /** Every call returns a result envelope; I/O errors surface as ok:false, not thrown rejections. */
@@ -43,5 +77,16 @@ export interface FairyBridge {
     saveProvider(p: SaveProviderPayload): Promise<SettingsResult>;
     deleteProvider(id: string): Promise<SettingsResult>;
     selectProvider(id: string | null): Promise<SettingsResult>;
+  };
+  chat: {
+    /** Send one user turn; resolves with the final assistant message. Deltas arrive via onChunk. */
+    send(text: string): Promise<ChatSendResult>;
+    clear(): Promise<SimpleResult>;
+    /** Subscribe to streaming deltas. Returns an unsubscribe function. */
+    onChunk(cb: (e: ChatChunkEvent) => void): () => void;
+    /** Subscribe to runtime state transitions (drives the orb). Returns an unsubscribe function. */
+    onState(cb: (e: RuntimeStateEvent) => void): () => void;
+    /** Subscribe to broker online/offline transitions. Returns an unsubscribe function. */
+    onBrokerState(cb: (e: BrokerStateEvent) => void): () => void;
   };
 }
