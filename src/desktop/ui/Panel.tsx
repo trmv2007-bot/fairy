@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 export interface PanelProps {
   open: boolean;
@@ -7,6 +7,16 @@ export interface PanelProps {
 }
 
 export function Panel({ open, onClose, children }: PanelProps): React.ReactElement | null {
+  // Escape closes the dialog — standard a11y affordance for side panels.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <aside

@@ -3,8 +3,14 @@ dist/
 *.log
 .env
 .env.*
+!.env.example
 secrets/
 native/**/bin/
 native/**/obj/
 tests/e2e/.cache/
 coverage/
+release/
+build/
+playwright-report/
+test-results/
+.DS_Store

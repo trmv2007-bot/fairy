@@ -34,6 +34,16 @@ Phase A–E scaffolds complete. 15 commits. All gates green.
 3. Pick a subscription connector (T19) for cloud route.
 4. Begin T30 daily-use packaging after T08+T12+T13 live proofs.
 
+## Hardening pass (follow-up)
+- Journal replay: monotonic `seq` column — same-ms bursts now replay in insertion order.
+- `sanitizeConfigForPersist`: secret-field matching is substring-based (topSecret/authToken/myApiKey count).
+- `tsconfig.tests.json` exclude override: test files are actually type-checked now.
+- `EvolutionClient` no longer returns hardcoded `passed: true` — HTTP evaluator client, fail closed.
+- `EgressTests.cs` synced with fail-closed parent resolution; `UpgradeTests.cs` added (Fairy.Evaluator now referenced).
+- Electron main: IPC result envelopes + payload validation on all handlers, origin-based dev-URL check, webview/permission lockdown, vault handle cleanup on key replacement.
+- `ResourceGovernor`: stale heavy slot self-heals after 30 min (crashed jobs cannot block forever).
+- DX/packaging: `.env.example`, LICENSE (MIT), GitHub Actions CI, `postinstall` electron-rebuild, `asarUnpack` for `*.node`, `.gitignore` entries, README rewrite.
+
 ## Files
 - fairyplan.md (original spec, 483 lines)
 - OVERNIGHT_REPORT.md (this)

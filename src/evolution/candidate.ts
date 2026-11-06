@@ -1,4 +1,6 @@
 // Candidate generation in isolated workspace (T17). Never edits running install.
+import { randomUUID } from 'node:crypto';
+
 export interface Candidate {
   id: string;
   sourceRevision: string;
@@ -8,6 +10,8 @@ export interface Candidate {
 }
 export class CandidateManager {
   generate(sourceRevision: string, workspacePath: string, manifest: import('./manifest.js').CapabilityManifest): Candidate {
-    return { id: 'cand_' + Date.now(), sourceRevision, workspacePath, manifest, status: 'generated' };
+    // randomUUID, not Date.now() — two candidates generated in the same
+    // millisecond must not collide on id.
+    return { id: 'cand_' + randomUUID(), sourceRevision, workspacePath, manifest, status: 'generated' };
   }
 }

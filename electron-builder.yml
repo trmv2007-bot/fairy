@@ -3,6 +3,10 @@ productName: Fairy
 directories:
   output: release
   buildResources: build
+# Native modules (better-sqlite3's .node binaries) live inside app.asar by default
+# and cannot be dlopen'ed from there — unpack them to disk.
+asarUnpack:
+  - "**/*.node"
 win:
   target: nsis
   artifactName: Fairy-Setup-${version}.exe
@@ -10,5 +14,9 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 files:
-  - dist/**/*
+  # main process + preload (tsc output); the tsc-emitted renderer copies in
+  # dist/desktop/ui are dead weight — vite owns dist/ui
+  - dist/desktop/**/*
+  - "!dist/desktop/ui/**/*"
+  - dist/ui/**/*
   - package.json

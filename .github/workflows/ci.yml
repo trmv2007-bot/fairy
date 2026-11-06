@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  ts:
+    name: TypeScript (typecheck + tests + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - run: npm run test:security
+      - run: npm run build
+
+  native:
+    name: Native (.NET 8 broker tests)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet run --project native/Fairy.Tests/Fairy.Tests.csproj
+
+  e2e:
+    name: Electron e2e (report-only)
+    runs-on: ubuntu-latest
+    # Electron under xvfb is environment-sensitive; failures surface here but
+    # do not block merges until the e2e suite grows beyond the shell spec.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: xvfb-run -a npx playwright test

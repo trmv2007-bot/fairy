@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fairy.Broker\Fairy.Broker.csproj" />
+    <ProjectReference Include="..\Fairy.Evaluator\Fairy.Evaluator.csproj" />
     <ProjectReference Include="..\Fairy.Recovery\Fairy.Recovery.csproj" />
   </ItemGroup>
 </Project>

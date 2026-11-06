@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { openInMemoryDatabase } from '../../src/storage/database.js';
 import { JobStore } from '../../src/storage/jobs.js';
 import { EventJournalImpl } from '../../src/storage/journal.js';
+import { Coordinator } from '../../src/runtime/coordinator.js';
 import type { Job } from '../../src/contracts/jobs.js';
 
 describe('T06 state persistence', () => {
@@ -46,22 +47,46 @@ describe('T06 state persistence', () => {
     expect(list.length).toBe(1);
     j.acknowledge(ev.eventId);
     const list2 = j.since(null);
-    expect(list2[0].acknowledged).toBe(true);
+    expect(list2[0]!.acknowledged).toBe(true);
   });
 
-  it('resumes interrupted job once (idempotent state)', () => {
+  it('restart recovery: running jobs become outcome-unknown and can be re-queued once', () => {
     const db = openInMemoryDatabase();
-    const store = new JobStore(db);
-    const job: Job = {
-      id: 'job-3', origin: 'manual', goal: 'g', scopeIds: [], state: 'running',
-      resourceBudget: {}, evidenceRefs: [], createdAt: Date.now(), updatedAt: Date.now(),
-    };
-    store.create(job);
-    // simulate crash: state remains running; on resume, mark succeeded once
-    store.updateState('job-3', 'succeeded');
-    expect(store.get('job-3')?.state).toBe('succeeded');
-    // re-applying does not duplicate
-    store.updateState('job-3', 'succeeded');
-    expect(store.get('job-3')?.state).toBe('succeeded');
+    const coordinator = Coordinator.fromDb(db);
+    const id = coordinator.enqueue({ goal: 'interrupted work', origin: 'manual' });
+    coordinator.claimNext();
+    expect(coordinator.get(id)?.state).toBe('running');
+
+    // simulate crash + restart: same db, new coordinator instance
+    const restarted = Coordinator.fromDb(db);
+    const interrupted = restarted.markInterruptedAsUnknown();
+    expect(interrupted).toBe(1);
+    expect(restarted.get(id)?.state).toBe('outcome-unknown');
+
+    // resumption is explicit and transitions through the queue
+    expect(restarted.resume(id)).toBe(true);
+    expect(restarted.get(id)?.state).toBe('queued');
+    expect(restarted.resume(id)).toBe(false); // queued -> queued is not a valid transition
+  });
+
+  it('invalid state transitions are rejected', () => {
+    const db = openInMemoryDatabase();
+    const coordinator = Coordinator.fromDb(db);
+    const id = coordinator.enqueue({ goal: 'g', origin: 'manual' });
+    // queued -> succeeded is not a legal transition
+    expect(coordinator.transition(id, 'succeeded')).toBeNull();
+    expect(coordinator.get(id)?.state).toBe('queued');
+    // succeeded jobs are terminal
+    coordinator.claimNext();
+    expect(coordinator.transition(id, 'succeeded')).not.toBeNull();
+    expect(coordinator.transition(id, 'running')).toBeNull();
+    expect(coordinator.get(id)?.state).toBe('succeeded');
+  });
+
+  it('enqueue rejects empty goals and origins', () => {
+    const db = openInMemoryDatabase();
+    const coordinator = Coordinator.fromDb(db);
+    expect(() => coordinator.enqueue({ goal: '   ', origin: 'manual' })).toThrow(/non-empty/);
+    expect(() => coordinator.enqueue({ goal: 'g', origin: '' })).toThrow(/non-empty/);
   });
 });

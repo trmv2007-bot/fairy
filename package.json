@@ -6,13 +6,19 @@
   "main": "dist/desktop/main.js",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "tsc",
-    "test:unit": "vitest run --config vitest.config.ts",
-    "test:integration": "vitest run --config vitest.config.ts tests/integration",
-    "test:security": "vitest run --config vitest.config.ts tests/security",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
+    "build": "tsc && vite build",
+    "build:main": "tsc",
+    "build:ui": "vite build",
+    "test": "npm run typecheck && npm run test:unit && npm run test:integration && npm run test:security",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:security": "vitest run tests/security",
     "test:e2e": "playwright test",
-    "dev": "electron ."
+    "test:native": "dotnet run --project native/Fairy.Tests/Fairy.Tests.csproj",
+    "postinstall": "electron-builder install-app-deps",
+    "dev": "electron .",
+    "dev:ui": "vite"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

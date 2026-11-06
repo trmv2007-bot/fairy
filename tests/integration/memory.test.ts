@@ -9,7 +9,7 @@ describe('T09 memory', () => {
     m.add({ content: 'user prefers concise answers', source: 'chat', sensitivity: 'internal' });
     const r = m.search('concise');
     expect(r.length).toBe(1);
-    expect(r[0].content).toContain('concise');
+    expect(r[0]!.content).toContain('concise');
   });
 
   it('delete removes from retrieval', () => {
