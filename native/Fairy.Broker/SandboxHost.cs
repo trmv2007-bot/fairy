@@ -25,14 +25,30 @@ public sealed class SandboxHost
         if (string.IsNullOrWhiteSpace(requested)) return null;
         // reject absolute-ish / drive letters
         if (Path.IsPathRooted(requested)) return null;
+        // reject explicit parent traversal before combining: a sibling jail whose name
+        // shares a prefix (e.g. C:\sandbox vs C:\sandbox2) must never be reachable.
+        foreach (var part in requested.Split('/', '\\'))
+        {
+            if (part == "..") return null;
+        }
         string candidate;
         try { candidate = Path.GetFullPath(Path.Combine(WorkspaceRoot, requested)); }
         catch { return null; }
-        if (!candidate.StartsWith(WorkspaceRoot, StringComparison.OrdinalIgnoreCase)) return null;
+        // jail check with trailing separator: a plain StartsWith(WorkspaceRoot) prefix
+        // test passes for sibling directories sharing the root's string prefix.
+        var jail = WorkspaceRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? WorkspaceRoot
+            : WorkspaceRoot + Path.DirectorySeparatorChar;
+        if (!candidate.StartsWith(jail, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(candidate, WorkspaceRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
         // reject any reparse point (junction/symlink) along the resolved path
         try
         {
             var rel = Path.GetRelativePath(WorkspaceRoot, candidate);
+            if (rel.StartsWith("..", StringComparison.Ordinal)) return null;
             var cur = WorkspaceRoot;
             if (rel != ".")
             {
@@ -55,13 +71,13 @@ public sealed class SandboxHost
             if (fi.Exists)
             {
                 var real = fi.ResolveLinkTarget(returnFinalTarget: true);
-                if (real != null && !real.FullName.StartsWith(WorkspaceRoot, StringComparison.OrdinalIgnoreCase)) return null;
+                if (real != null && !real.FullName.StartsWith(jail, StringComparison.OrdinalIgnoreCase)) return null;
             }
             var di = new DirectoryInfo(candidate);
             if (di.Exists)
             {
                 var real = di.ResolveLinkTarget(returnFinalTarget: true);
-                if (real != null && !real.FullName.StartsWith(WorkspaceRoot, StringComparison.OrdinalIgnoreCase)) return null;
+                if (real != null && !real.FullName.StartsWith(jail, StringComparison.OrdinalIgnoreCase)) return null;
             }
         }
         catch { return null; }

@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { FairyConfig } from '../providers/config.js';
-import { loadConfig } from '../providers/config.js';
+import { loadConfig, sanitizeConfigForPersist } from '../providers/config.js';
 
 export class SettingsStore {
   constructor(private path: string) {}
@@ -20,8 +20,11 @@ export class SettingsStore {
   save(cfg: FairyConfig): void {
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     try { chmodSync(dirname(this.path), 0o700); } catch { /* best effort on Windows */ }
-    // Never persist raw secrets — only broker handles (already in config)
-    writeFileSync(this.path, JSON.stringify(cfg, null, 2), { encoding: 'utf8', mode: 0o600 });
+    // Defense in depth: strip any secret-shaped fields before serialization, then
+    // persist only validated config (raw API keys never reach this path â€” they live
+    // in the main-process SecretVault / native broker CredentialHost).
+    const safe = sanitizeConfigForPersist(loadConfig(cfg));
+    writeFileSync(this.path, JSON.stringify(safe, null, 2), { encoding: 'utf8', mode: 0o600 });
     try { chmodSync(this.path, 0o600); } catch { /* best effort on Windows */ }
   }
 

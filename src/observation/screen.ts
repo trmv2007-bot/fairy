@@ -25,10 +25,14 @@ export class ScreenObserverImpl implements ScreenObserver {
 
   private arm(): void {
     if (this.timer) return;
+    // Clamp to a sane capture range (0.5–5 fps). A zero/negative rate would make
+    // 1000/fps degenerate (Infinity clamps setInterval to 1ms — a busy loop).
+    const fps = Math.min(Math.max(this.captureRateFps, 0.5), 5);
+    const intervalMs = Math.max(200, Math.round(1000 / fps));
     this.timer = setInterval(() => {
       if (this.isPaused || !this.enabled) return;
       this.cb?.({ ts: Date.now(), width: 1920, height: 1080 });
-    }, Math.max(1000, Math.floor(1000 / this.captureRateFps)));
+    }, intervalMs);
   }
   private disarm(): void { if (this.timer) { clearInterval(this.timer); this.timer = null; } }
 }

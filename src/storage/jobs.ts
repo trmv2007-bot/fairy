@@ -17,6 +17,7 @@ export class JobStore {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS idx_jobs_state_created ON jobs(state, created_at);
     `);
   }
 
@@ -39,6 +40,18 @@ export class JobStore {
 
   updateState(id: string, state: JobState): void {
     this.db.prepare('UPDATE jobs SET state = ?, updated_at = ? WHERE id = ?').run(state, Date.now(), id);
+  }
+
+  updateCheckpoint(id: string, checkpoint: string): void {
+    this.db.prepare('UPDATE jobs SET checkpoint = ?, updated_at = ? WHERE id = ?').run(checkpoint, Date.now(), id);
+  }
+
+  /** Oldest queued job (FIFO), or null. Used by Coordinator.claimNext. */
+  nextQueued(): Job | null {
+    const row = this.db.prepare(
+      "SELECT * FROM jobs WHERE state = 'queued' ORDER BY created_at LIMIT 1"
+    ).get() as Record<string, unknown> | undefined;
+    return row ? rowToJob(row) : null;
   }
 
   listByState(state: JobState): Job[] {

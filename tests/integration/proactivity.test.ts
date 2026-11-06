@@ -28,10 +28,33 @@ describe('T14 proactivity', () => {
     expect(r.acquireHeavy()).toBe(true);
   });
 
-  it('budget exhaustion stops loops (counter guard)', () => {
-    let count = 0;
-    const max = 3;
-    while (count < max) { count++; }
-    expect(count).toBe(3);
+  it('budget exhaustion stops job claims (maxAttempts honored via claim loop)', () => {
+    const db = openInMemoryDatabase();
+    const c = Coordinator.fromDb(db);
+    for (let i = 0; i < 5; i++) c.enqueue({ goal: `job ${i}`, origin: 'schedule' });
+    // worker budget: at most 3 concurrent claims this cycle
+    const budget = 3;
+    let claimed = 0;
+    while (claimed < budget) {
+      const job = c.claimNext();
+      if (!job) break;
+      claimed++;
+      expect(job.state).toBe('running');
+    }
+    expect(claimed).toBe(3);
+    // unclaimed work stays queued
+    expect(c.queuedCount()).toBe(2);
+  });
+
+  it('claims are FIFO by creation order', () => {
+    const db = openInMemoryDatabase();
+    const c = Coordinator.fromDb(db);
+    const ids = [
+      c.enqueue({ goal: 'first', origin: 'manual' }),
+      c.enqueue({ goal: 'second', origin: 'manual' }),
+    ];
+    expect(c.claimNext()?.id).toBe(ids[0]);
+    expect(c.claimNext()?.id).toBe(ids[1]);
+    expect(c.claimNext()).toBeNull();
   });
 });

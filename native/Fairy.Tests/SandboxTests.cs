@@ -21,6 +21,16 @@ public static class SandboxTests
         // escape via ..
         Assert(sb.ResolveInside("../escape.txt") == null, "dotdot escape denied");
 
+        // sibling-prefix escape (regression): a sibling dir whose name shares the
+        // root's string prefix must be unreachable even when it actually exists.
+        var sibling = root.TrimEnd(Path.DirectorySeparatorChar) + "2";
+        Directory.CreateDirectory(sibling);
+        File.WriteAllText(Path.Combine(sibling, "secret.txt"), "outside");
+        Assert(sb.ResolveInside("../" + Path.GetFileName(sibling) + "/secret.txt") == null,
+            "existing sibling-prefix escape denied");
+        Assert(sb.ResolveInside("..\\sub\\..\\evil.txt") == null, "obfuscated dotdot denied");
+        Directory.Delete(sibling, true);
+
         // absolute path denied
         Assert(sb.ResolveInside("C:/Windows/System32/cmd.exe") == null, "absolute path denied");
 

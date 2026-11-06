@@ -1,26 +1,67 @@
-// Settings UI (React) — lets user add cloud providers, store keys via broker handle.
+// Settings UI (React) — lets the user add cloud providers. The API key is handed to
+// the main-process vault via the typed bridge; it is never persisted to disk.
 import React, { useState } from 'react';
+import type { SaveProviderPayload } from './bridge.js';
 
 export interface ProviderForm {
   endpointId: string;
   baseUrl: string;
-  apiKey: string; // entered here, immediately handed to broker; never stored
+  apiKey: string; // entered here, immediately vaulted by the main process; never stored
+  model: string;
   includedCost: boolean;
-  allowedDataScopes: string;
+  allowedDataScopes: string; // comma-separated text field
 }
 
-export function SettingsPanel({ onSave }: { onSave: (f: ProviderForm) => void }): React.ReactElement {
-  const [form, setForm] = useState<ProviderForm>({
-    endpointId: '', baseUrl: '', apiKey: '', includedCost: false, allowedDataScopes: 'public',
-  });
+export const EMPTY_FORM: ProviderForm = {
+  endpointId: '', baseUrl: '', apiKey: '', model: '', includedCost: false, allowedDataScopes: 'public',
+};
+
+export function formToPayload(form: ProviderForm): SaveProviderPayload {
+  const model = form.model.trim();
+  return {
+    endpointId: form.endpointId.trim(),
+    baseUrl: form.baseUrl.trim(),
+    ...(model === '' ? {} : { model }),
+    includedCost: form.includedCost,
+    allowedDataScopes: form.allowedDataScopes.split(',').map(s => s.trim()).filter(s => s.length > 0),
+    ...(form.apiKey.trim() === '' ? {} : { apiKey: form.apiKey.trim() }),
+  };
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '6px 8px',
+  boxSizing: 'border-box',
+  background: '#1e293b',
+  border: '1px solid #334155',
+  borderRadius: 4,
+  color: '#e2e8f0',
+};
+
+export function SettingsPanel({ onSave, saving }: { onSave: (p: SaveProviderPayload) => void; saving?: boolean }): React.ReactElement {
+  const [form, setForm] = useState<ProviderForm>({ ...EMPTY_FORM });
+  const set = (patch: Partial<ProviderForm>) => setForm(f => ({ ...f, ...patch }));
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSave(form); }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <label>Provider id<input value={form.endpointId} onChange={e => setForm({ ...form, endpointId: e.target.value })} /></label>
-      <label>Base URL<input value={form.baseUrl} onChange={e => setForm({ ...form, baseUrl: e.target.value })} /></label>
-      <label>API key (handed to broker, not stored)<input type="password" value={form.apiKey} onChange={e => setForm({ ...form, apiKey: e.target.value })} /></label>
-      <label><input type="checkbox" checked={form.includedCost} onChange={e => setForm({ ...form, includedCost: e.target.checked })} /> Included cost (zero additional spend)</label>
-      <label>Allowed data scopes (comma)<input value={form.allowedDataScopes} onChange={e => setForm({ ...form, allowedDataScopes: e.target.value })} /></label>
-      <button type="submit">Save provider</button>
+    <form onSubmit={(e) => { e.preventDefault(); onSave(formToPayload(form)); }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <label>Provider id
+        <input style={inputStyle} value={form.endpointId} placeholder="openai" onChange={e => set({ endpointId: e.target.value })} />
+      </label>
+      <label>Base URL
+        <input style={inputStyle} value={form.baseUrl} placeholder="https://api.openai.com/v1" onChange={e => set({ baseUrl: e.target.value })} />
+      </label>
+      <label>API key (held in memory for this session; never written to disk)
+        <input style={inputStyle} type="password" value={form.apiKey} onChange={e => set({ apiKey: e.target.value })} />
+      </label>
+      <label>Model (optional)
+        <input style={inputStyle} value={form.model} placeholder="gpt-4o-mini" onChange={e => set({ model: e.target.value })} />
+      </label>
+      <label>
+        <input type="checkbox" checked={form.includedCost} onChange={e => set({ includedCost: e.target.checked })} /> Included cost (zero additional spend)
+      </label>
+      <label>Allowed data scopes (comma)
+        <input style={inputStyle} value={form.allowedDataScopes} onChange={e => set({ allowedDataScopes: e.target.value })} />
+      </label>
+      <button type="submit" disabled={saving === true}>Save provider</button>
     </form>
   );
 }
