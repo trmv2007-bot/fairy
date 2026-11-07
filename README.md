@@ -11,6 +11,7 @@ Proactive Windows desktop assistant (Electron + TS + React + SQLite + .NET 8 bro
 |---|---|
 | ![Boot ritual](docs/screenshots/boot.png) | ![Orb](docs/screenshots/orb.png) |
 | ![Chat](docs/screenshots/chat.png) | ![Providers](docs/screenshots/providers.png) |
+| ![History](docs/screenshots/v06/history.png) | ![Light theme](docs/screenshots/v06/light-theme.png) |
 
 ## The v0.5 remodel ("holo-glass")
 
@@ -50,6 +51,24 @@ against the new shell. Full tour: `docs/screenshots/`.
   offline, polled every 30 s).
 - **Git connector** — real local repo read operations (status/log/diff) via a
   fixed-arg-vector `execFile` (no shell), with an injectable runner for tests.
+
+- **Persistent chat history (v0.6)** — every exchange lands in SQLite
+  (tool calls included, so a reopened conversation restores the model's exact
+  context). Fairy resumes the latest transcript at boot; the History strip
+  searches, reopens and deletes archived conversations; Clear archives
+  instead of destroying.
+- **Ollama (local, offline)** — keyless preset for `localhost:11434/v1`;
+  keyless routes are accepted only for loopback/private hosts.
+- **Fairy's voice** — opt-in TTS via the OS speech engine (`Voice` chip in
+  Chat); code blocks and URLs are never spoken.
+- **Floating orb + tray + hotkey** — opt-in borderless always-on-top eye
+  (Status → Shell presence), tray icon with Open/orb/Quit, and
+  `Ctrl/Cmd+Shift+F` summons the panel from anywhere.
+- **Light theme + accents** — Night CRT / Daylight ops, four iris accents
+  (Fairy Blue, Signal Cyan, Holo Violet, Neon Magenta) in Status → Appearance.
+- **`fairy-doctor`** — `npm run doctor` (or `electron . --doctor`) probes every
+  provider key with a free `GET /models` and prints a verdict: 200 ok,
+  401/403 auth-rejected, 429 rate-limited (key valid!), timeout unreachable.
 
 Scaffolded but not yet wired into the running app: job workers, observation loops,
 remaining connectors, skills runtime. See `fairyplan.md` for the full spec.

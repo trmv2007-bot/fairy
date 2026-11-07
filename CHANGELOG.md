@@ -3,17 +3,75 @@
 All notable changes to Fairy. Format loosely follows Keep a Changelog;
 version numbers are milestone tags, not semver promises.
 
+## [0.6.0] — The companion update — 2026-11-08
+
+### Added
+- **Persistent chat history**: new `ConversationStore` in the fairy.db SQLite
+  file. Every turn (user, assistant, tool calls, tool results) is persisted as
+  it enters history; the latest transcript resumes automatically at boot, both
+  in the model's context and the UI. `Clear` archives — it never destroys. The
+  Chat panel gains a History strip: full-text search (LIKE with escaped
+  wildcards), reopen, delete (deleting the active transcript clears live
+  memory too). Store failures degrade to log lines — chat never dies with the
+  database.
+- **`fairy-doctor`**: `npm run doctor` / `electron . --doctor` probes every
+  registered provider with a free `GET {baseUrl}/models` and prints a
+  canon-flavored verdict — 200 OK, 401/403 auth-rejected, 429 rate-limited
+  (key VALID), timeout unreachable — plus config/key-storage/journal health.
+  Exits 0 only when every keyed route is live. Keyless local endpoints are
+  probed without an auth header. 12 unit tests; no key material is ever
+  printed.
+- **Ollama preset (keyless local routes)**: `http://localhost:11434/v1` with
+  no API key. `CloudProvider`/gateway accept keyless configs; the sanitizer
+  keeps `keyless` ONLY for loopback/RFC1918 hosts (public hosts silently lose
+  the flag — no unauthenticated cloud routes). `saveProvider` registers new
+  keyless providers without a vault handle.
+- **Fairy's voice (opt-in TTS)**: `Voice` chip in Chat speaks replies through
+  the renderer's OS speech engine. Deterministic canon voice pick,
+  `forSpeech()` strips code blocks/URLs/markup and caps at a sentence
+  boundary, speak replaces the queue instead of stacking. Persisted in
+  localStorage, off by default, hidden when no engine exists.
+- **Floating orb widget (opt-in)**: borderless transparent always-on-top
+  window rendering the eye (`?view=orb`); it mirrors runtime state live,
+  summons the panel on click, and can be dragged anywhere. Toggle in
+  Status → Shell presence; journaled like every arm switch.
+- **System tray + global hotkey**: tray icon (embedded 16 px eye data-URL —
+  no packaging resources) with Open / Floating-orb / Quit; `Ctrl/Cmd+Shift+F`
+  summons the panel. Tray present → closing parks to tray; tray unavailable
+  (headless Linux) → quit behavior unchanged.
+- **Light theme + accent picker**: 41 hardcoded accent `rgba()` calls became
+  `--f-acc-rgb`/`--f-cyan-rgb`/`--f-shine-rgb` triplets. Four iris accents
+  (Fairy Blue / Signal Cyan / Holo Violet / Neon Magenta), each with a darker
+  light-theme variant; light theme owns surfaces and dials scanlines to 0.16.
+  Persisted renderer-side, applied before first paint in both windows.
+- **Packaging**: win NSIS + mac DMG + linux AppImage targets; tag-triggered
+  Release workflow builds on native runners and attaches installers;
+  `dist:dir` for fast unpacked sanity checks.
+
+### Fixed
+- **Packaged app could never boot** (found by smoke-testing the unpacked
+  build): the electron-builder `files` list shipped only `dist/desktop` +
+  `dist/ui`, so main-process ESM imports (`dist/storage`, `dist/providers`,
+  …) failed with ERR_MODULE_NOT_FOUND inside the asar. Now `dist/**/*`
+  ships whole. Verified: `linux-unpacked/fairy --doctor` boots, opens the DB,
+  probes, exits 0.
+- Light-theme readability: dark glass surfaces (buttons, chips, inputs, rows,
+  wordmark gradient) became theme-aware vars.
+- Doctor probe misclassified real fetch timeouts (Node `DOMException` is not
+  an `Error` instance) — names are now read structurally.
+- Same-millisecond transcript creation could tie on `updated_at` — ordering
+  is now monotonic within the process.
+
+### Security
+- Keyless routes are host-restricted (loopback/private only); the doctor
+  probes keyless endpoints without credentials and never prints key material.
+
 ## [Unreleased]
 
-### Planned (v0.6 batch)
-- Persistent chat history (SQLite): conversations survive restarts, session
-  list, search, resume.
-- Provider presets: Ollama (local, OpenAI-compatible).
-- Voice: speak replies via the OS speech engine (opt-in).
-- Floating orb widget, system tray, global hotkey.
-- Appearance: light theme + accent color.
-- Packaging: electron-builder targets + release workflow.
-- `fairy-doctor` diagnostics CLI.
+### Planned
+- Anthropic's native Messages API (Claude is reachable today via the
+  OpenRouter preset); dictation/ASR (Electron's Chromium lacks the Google
+  speech backend — a cloud ASR endpoint or whisper.cpp would be needed).
 
 ## [0.5.0] — Shell remodel ("holo-glass") — 2026-11-06
 

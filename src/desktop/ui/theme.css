@@ -30,6 +30,17 @@
   --f-shine-rgb: 150, 224, 255;
   /* CRT layer strength (light theme dials it down, not out) */
   --f-scan-opacity: 0.5;
+  /* theme-aware surface stack (light theme overrides all of these) */
+  --f-btn-bg: rgba(10, 19, 38, 0.55);
+  --f-chip-bg: rgba(10, 19, 38, 0.5);
+  --f-chip-info-bg: rgba(10, 19, 38, 0.4);
+  --f-chip-info-line: rgba(29, 48, 85, 0.9);
+  --f-input-bg: rgba(12, 23, 48, 0.72);
+  --f-row-bg: rgba(10, 19, 38, 0.5);
+  --f-row-line: rgba(29, 48, 85, 0.85);
+  --f-placeholder: #46556e;
+  /* the wordmark gradient: near-white start lands on dark glass */
+  --f-wordmark-hi: #e8f2ff;
 }
 
 /* ── Light theme (v0.6): daylight ops room — surfaces only; iris color is
@@ -45,6 +56,15 @@
   --f-warn: #a06b00;
   --f-glass: rgba(255, 255, 255, 0.72);
   --f-scan-opacity: 0.16;
+  --f-btn-bg: rgba(255, 255, 255, 0.66);
+  --f-chip-bg: rgba(255, 255, 255, 0.62);
+  --f-chip-info-bg: rgba(255, 255, 255, 0.5);
+  --f-chip-info-line: rgba(160, 180, 210, 0.9);
+  --f-input-bg: rgba(255, 255, 255, 0.85);
+  --f-row-bg: rgba(255, 255, 255, 0.6);
+  --f-row-line: rgba(160, 180, 210, 0.9);
+  --f-placeholder: #7a8aa5;
+  --f-wordmark-hi: #1c3a6e;
 }
 
 /* ── Accent themes (v0.6): same eye, different iris color ─────────────── */
@@ -165,7 +185,7 @@ body::before {
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 .f-btn {
   font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
-  background: rgba(10, 19, 38, 0.55); color: var(--f-acc-dim);
+  background: var(--f-btn-bg); color: var(--f-acc-dim);
   border: 1px solid var(--f-line); padding: 5px 12px; cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
@@ -183,7 +203,7 @@ body::before {
 .f-chip {
   font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
   padding: 4px 11px; cursor: pointer; position: relative;
-  color: var(--f-muted); background: rgba(10, 19, 38, 0.5);
+  color: var(--f-muted); background: var(--f-chip-bg);
   border: 1px solid var(--f-line);
   transition: color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
@@ -197,14 +217,14 @@ body::before {
 }
 /* passive chips (key pool / broker readouts) */
 .f-chip-info {
-  color: var(--f-muted); border-color: rgba(29, 48, 85, 0.9);
-  background: rgba(10, 19, 38, 0.4); cursor: default;
+  color: var(--f-muted); border-color: var(--f-chip-info-line);
+  background: var(--f-chip-info-bg); cursor: default;
 }
 
 /* ── Inputs ───────────────────────────────────────────────────────────────── */
 .f-input {
   width: 100%; box-sizing: border-box; color: var(--f-text);
-  background: rgba(12, 23, 48, 0.72);
+  background: var(--f-input-bg);
   border: 1px solid var(--f-line); padding: 7px 9px; font-size: 13px; outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -212,7 +232,7 @@ body::before {
   border-color: rgba(var(--f-cyan-rgb), 0.65);
   box-shadow: 0 0 0 1px rgba(var(--f-cyan-rgb), 0.35), 0 0 14px rgba(var(--f-cyan-rgb), 0.14);
 }
-.f-input::placeholder { color: #46556e; }
+.f-input::placeholder { color: var(--f-placeholder); }
 textarea.f-input { resize: none; font-family: inherit; }
 input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 
@@ -248,8 +268,8 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 .f-row {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding: 8px 12px; margin-bottom: 6px;
-  background: linear-gradient(90deg, rgba(var(--f-cyan-rgb), 0.05), rgba(10, 19, 38, 0.5) 32%);
-  border: 1px solid rgba(29, 48, 85, 0.85);
+  background: linear-gradient(90deg, rgba(var(--f-cyan-rgb), 0.05), var(--f-row-bg) 32%);
+  border: 1px solid var(--f-row-line);
   border-left: 2px solid rgba(var(--f-cyan-rgb), 0.5);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -263,7 +283,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 /* Wordmark: gradient glyph (remodel signature) */
 .f-wordmark {
   font-family: var(--f-mono);
-  background: linear-gradient(92deg, #e8f2ff 8%, var(--f-cyan) 55%, var(--f-acc) 96%);
+  background: linear-gradient(92deg, var(--f-wordmark-hi) 8%, var(--f-cyan) 55%, var(--f-acc) 96%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
