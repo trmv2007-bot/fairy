@@ -1,6 +1,6 @@
 {
   "name": "fairy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Fairy - proactive Windows desktop assistant",
   "private": true,
   "main": "dist/desktop/main.js",
@@ -31,10 +31,10 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^6.2.1",
     "electron": "^45.2.3",
     "electron-builder": "^26.18.0",
-    "jsdom": "^25.0.0",
+    "jsdom": "^31.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
