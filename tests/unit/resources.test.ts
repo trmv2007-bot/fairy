@@ -11,13 +11,17 @@ describe('ResourceGovernor', () => {
     expect(g.acquireHeavy()).toBe(true);
   });
 
-  it('reclaims a stale heavy slot (crashed job cannot block forever)', async () => {
+  it('reclaims a stale heavy slot (crashed job cannot block forever)', () => {
     const g = new ResourceGovernor(30); // 30ms staleness
-    expect(g.acquireHeavy()).toBe(true);
-    await new Promise(r => setTimeout(r, 60));
+    // Drive the whole scenario on one injected clock: noon is outside the
+    // 23:00–07:00 quiet window, so quiet hours cannot pollute the assertion,
+    // and injected timestamps make the staleness math deterministic.
+    const noon = new Date('2026-06-15T12:00:00');
+    expect(g.acquireHeavy(noon)).toBe(true);
+    const later = new Date(noon.getTime() + 60_000); // +60s ≫ 30ms TTL
     // the crashed job never released — but the slot self-heals
-    expect(g.canRunHeavy()).toBe(true);
-    expect(g.acquireHeavy()).toBe(true);
+    expect(g.canRunHeavy(later)).toBe(true);
+    expect(g.acquireHeavy(later)).toBe(true);
   });
 
   it('a fresh heavy slot is not reclaimed', () => {
