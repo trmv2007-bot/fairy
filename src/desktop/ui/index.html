@@ -9,17 +9,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fairy</title>
     <style>
-      /* ── Fairy system theme (ZZZ-inspired holographic HUD) ─────────────── */
+      /* ── Fairy system theme (canon ZZZ palette: navy CRT + Fairy blue) ─── */
+      /* Official key visual: Fairy's emblem is a BLUE concentric eye on a dark
+         navy CRT (Youkai gets red). The H.D.D. room is blue/cyan CRT glow.
+         Evidence: 2nd-anniversary KR promo (Fairy/Youkai split CRT), HDD room
+         cutscene. Phosphor green was a terminal trope, not canon. */
       :root {
-        --f-bg0: #04070a;
-        --f-bg1: #0a1410;
-        --f-bg2: #0f1c16;
-        --f-line: #1c3829;
-        --f-green: #3dff9c;
-        --f-green-dim: #6fcfa1;
-        --f-cyan: #3fd9ff;
-        --f-text: #d9efe3;
-        --f-muted: #71907f;
+        --f-bg0: #04060e;
+        --f-bg1: #0a1222;
+        --f-bg2: #101a30;
+        --f-line: #1f2f52;
+        --f-acc: #4f8cff;
+        --f-acc-dim: #86aede;
+        --f-cyan: #57d1ff;
+        --f-text: #dce8f8;
+        --f-muted: #7d8dab;
         --f-danger: #ff4d6d;
         --f-warn: #ffc44d;
         --f-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'JetBrains Mono', Menlo, monospace;
@@ -29,8 +33,8 @@
         font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
         color: var(--f-text);
         background:
-          radial-gradient(1100px 620px at 18% -10%, rgba(61, 255, 156, 0.07), transparent 60%),
-          radial-gradient(900px 520px at 110% 112%, rgba(63, 217, 255, 0.06), transparent 60%),
+          radial-gradient(1100px 620px at 18% -10%, rgba(79, 140, 255, 0.08), transparent 60%),
+          radial-gradient(900px 520px at 110% 112%, rgba(87, 209, 255, 0.06), transparent 60%),
           var(--f-bg0);
       }
       /* CRT scanlines + slow sweep, the Fairy terminal feel */
@@ -44,7 +48,7 @@
         content: '';
         position: fixed; left: 0; right: 0; top: -120px; height: 110px;
         z-index: 9998; pointer-events: none;
-        background: linear-gradient(180deg, transparent, rgba(61, 255, 156, 0.05), transparent);
+        background: linear-gradient(180deg, transparent, rgba(79, 140, 255, 0.05), transparent);
         animation: f-sweep 9s linear infinite;
       }
       @keyframes f-sweep { to { transform: translateY(calc(100vh + 240px)); } }
@@ -52,10 +56,10 @@
       /* HUD corner brackets */
       .hud-corners {
         background-image:
-          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green)),
-          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green)),
-          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green)),
-          linear-gradient(var(--f-green), var(--f-green)), linear-gradient(var(--f-green), var(--f-green));
+          linear-gradient(var(--f-acc), var(--f-acc)), linear-gradient(var(--f-acc), var(--f-acc)),
+          linear-gradient(var(--f-acc), var(--f-acc)), linear-gradient(var(--f-acc), var(--f-acc)),
+          linear-gradient(var(--f-acc), var(--f-acc)), linear-gradient(var(--f-acc), var(--f-acc)),
+          linear-gradient(var(--f-acc), var(--f-acc)), linear-gradient(var(--f-acc), var(--f-acc));
         background-repeat: no-repeat;
         background-size: 16px 2px, 2px 16px, 16px 2px, 2px 16px, 16px 2px, 2px 16px, 16px 2px, 2px 16px;
         background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
@@ -64,29 +68,29 @@
       /* HUD buttons */
       .f-btn {
         font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
-        background: transparent; color: var(--f-green-dim);
+        background: transparent; color: var(--f-acc-dim);
         border: 1px solid var(--f-line); padding: 5px 12px; cursor: pointer;
         transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
       }
-      .f-btn:hover { border-color: var(--f-green); color: var(--f-green); }
+      .f-btn:hover { border-color: var(--f-acc); color: var(--f-acc); }
       .f-btn:disabled { opacity: 0.4; cursor: default; }
-      .f-btn-active { background: rgba(61, 255, 156, 0.12); border-color: var(--f-green); color: var(--f-green); }
-      .f-btn-primary { background: rgba(61, 255, 156, 0.14); border: 1px solid var(--f-green); color: var(--f-green); }
-      .f-btn-primary:hover { background: rgba(61, 255, 156, 0.26); }
+      .f-btn-active { background: rgba(79, 140, 255, 0.12); border-color: var(--f-acc); color: var(--f-acc); }
+      .f-btn-primary { background: rgba(79, 140, 255, 0.14); border: 1px solid var(--f-acc); color: var(--f-acc); }
+      .f-btn-primary:hover { background: rgba(79, 140, 255, 0.26); }
 
       /* Inputs */
       .f-input {
-        width: 100%; box-sizing: border-box; background: #0c1512; color: var(--f-text);
+        width: 100%; box-sizing: border-box; background: #0c1424; color: var(--f-text);
         border: 1px solid var(--f-line); padding: 7px 9px; font-size: 13px; outline: none;
         transition: border-color 0.15s ease, box-shadow 0.15s ease;
       }
       .f-input:focus {
-        border-color: var(--f-green);
-        box-shadow: 0 0 0 1px rgba(61, 255, 156, 0.35), 0 0 12px rgba(61, 255, 156, 0.15);
+        border-color: var(--f-acc);
+        box-shadow: 0 0 0 1px rgba(79, 140, 255, 0.35), 0 0 12px rgba(79, 140, 255, 0.15);
       }
-      .f-input::placeholder { color: #4e635a; }
+      .f-input::placeholder { color: #4d5c74; }
       textarea.f-input { resize: none; font-family: inherit; }
-      input[type='checkbox'], input[type='radio'] { accent-color: var(--f-green); }
+      input[type='checkbox'], input[type='radio'] { accent-color: var(--f-acc); }
 
       /* Readout rows + labels */
       .f-label {
@@ -96,25 +100,20 @@
       .f-row {
         display: flex; justify-content: space-between; align-items: center; gap: 8px;
         padding: 8px 10px; background: var(--f-bg2); border: 1px solid var(--f-line);
-        border-left: 2px solid var(--f-green-dim); margin-bottom: 6px;
+        border-left: 2px solid var(--f-acc-dim); margin-bottom: 6px;
       }
-      .f-glow { color: var(--f-green); text-shadow: 0 0 8px rgba(61, 255, 156, 0.55); }
+      .f-glow { color: var(--f-acc); text-shadow: 0 0 8px rgba(79, 140, 255, 0.55); }
       .f-heading {
         font-family: var(--f-mono); font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
-        color: var(--f-green); margin: 14px 0 6px;
+        color: var(--f-acc); margin: 14px 0 6px;
       }
 
-      /* Dot-matrix face pixels: eyes blink; the mouth pulses while busy */
-      .f-px { display: inline-block; }
-      .f-px-eye { animation: f-px-blink 4.6s steps(1, end) infinite; }
-      @keyframes f-px-blink {
-        0%, 92%, 100% { opacity: 1; }
-        94%, 96% { opacity: 0.05; }
-      }
-      .f-px-mouth { animation: f-px-talk 0.8s steps(1, end) infinite; }
-      @keyframes f-px-talk {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.35; }
+      /* Fairy's eye emblem: the pupil blinks; faster while busy */
+      .f-pupil { animation: f-blink 4.2s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+      .f-pupil-fast { animation-duration: 1.1s; }
+      @keyframes f-blink {
+        0%, 92%, 100% { transform: scale(1, 1); }
+        95% { transform: scale(1.25, 0.12); }
       }
 
       /* Typing indicator dots */
@@ -124,8 +123,8 @@
       /* Scrollbar */
       ::-webkit-scrollbar { width: 8px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #1c3829; border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: #2a5240; }
+      ::-webkit-scrollbar-thumb { background: #1f2f52; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #31456f; }
     </style>
   </head>
   <body>

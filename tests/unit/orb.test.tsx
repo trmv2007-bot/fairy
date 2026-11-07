@@ -15,11 +15,13 @@ describe('Orb component', () => {
     expect(html).toContain('approval-needed');
   });
 
-  it('renders the canon dot-matrix face: eyes + mouth pixels', () => {
-    const html = renderToStaticMarkup(<Orb state="idle" />);
-    // 8 eye cells (2x2 blocks) + 7 mouth cells + off matrix dots
-    expect((html.match(/f-px-eye/g) ?? []).length).toBe(8);
-    expect((html.match(/f-px-off/g) ?? []).length).toBe(63 - 8 - 7);
-    expect(html).toContain('Fairy: online');
+  it('renders the canon eye-mandala: segmented rings + pupil, state hue', () => {
+    const html = renderToStaticMarkup(<Orb state="thinking" />);
+    // segmented outer ring + iris + glowing pupil, tinted by state
+    expect((html.match(/<circle/g) ?? []).length).toBe(4);
+    expect(html).toContain('stroke-dasharray'); // mandala segmentation
+    expect(html).toContain('f-iris-thinking'); // state-tinted iris gradient
+    expect(html).toContain('f-pupil'); // blink animation hook
+    expect(html).toContain('Fairy: processing');
   });
 });

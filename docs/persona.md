@@ -112,11 +112,17 @@ Speech rules the app follows:
 - **Aria** — knows Fairy only as the "Wishing Sprite" AI; Fairy moonlights
   under that alias on RopeNet.
 
-## 6. Appearance (canon)
+## 6. Appearance (canon — corrected against reference images)
 
-A **dot-matrix / pixel face on CRT-style screens** — phosphor cyan-green on
-near-black, rendered like a test-card readout; expressions are pixel eyes and
-mouth shifts. The v2.6 redesign modernized the avatar. **There is no official
+Fairy's official emblem is a **blue concentric eye-mandala on a dark navy CRT**:
+a segmented outer ring, an iris ring, and a glowing pupil. Evidence: the
+official 2nd-anniversary key visual (KR) shows a retro CRT split into a BLUE
+side labeled **Fairy** and a RED side labeled **Youkai** — the same eye motif
+in each faction's hue — and the H.D.D. room cutscene is wall-to-wall blue/cyan
+CRT glow. The ZZZ palette is therefore **navy/black + Fairy blue + cyan**,
+NOT phosphor green (an earlier revision of this app used green and a
+dot-matrix pixel face; both were terminal-tropes and have been reverted).
+The v2.6 release updated her appearance ("Old → New"). **There is no official
 human form** — "long white hair, blue eyes" designs are fan art / AI renders.
 
 ## 7. Canon vs fanon — do not use fanon in product copy
@@ -150,7 +156,7 @@ The runtime SYSTEM_PROMPT distills §4 to ~120 words:
 
 | Canon element | App implementation |
 | --- | --- |
-| Dot-matrix pixel face on a dark screen | `Orb.tsx` renders a 9×7 lit-pixel matrix (2×2 eyes, wide flat mouth); eyes blink, mouth pulses while busy, hue tracks state |
+| Dot-matrix pixel face on a dark screen | **Corrected**: canon is the blue eye-mandala emblem — `Orb.tsx` renders concentric SVG rings (segmented mandala + iris + pupil); pupil blinks, races while busy, hue tracks state |
 | She compels a user agreement before assisting | First-run `AgreementOverlay` (App.tsx): canon terms incl. the "opportunity" clause; Decline → *"Negative. The agreement is not optional."* once, then only Sign |
 | "According to the user agreement you signed…" | Verbatim quote on the agreement screen; signing persists `agreementAcceptedAt` in config + `fairy:agreement-signed` journal event |
 | H.D.D. (her Hollow Deep Dive System domain) | Status tab labels the native broker "H.D.D. link" |

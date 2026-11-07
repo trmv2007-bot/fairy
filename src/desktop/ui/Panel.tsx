@@ -29,10 +29,10 @@ export function Panel({ open, onClose, children }: PanelProps): React.ReactEleme
         width: 380,
         height: '100vh',
         boxSizing: 'border-box',
-        background: 'rgba(7, 14, 10, 0.97)',
+        background: 'rgba(7, 11, 22, 0.97)',
         color: 'var(--f-text)',
         borderLeft: '1px solid var(--f-line)',
-        boxShadow: '-1px 0 0 rgba(61,255,156,0.35), -10px 0 36px rgba(0,0,0,0.6)',
+        boxShadow: '-1px 0 0 rgba(79,140,255,0.35), -10px 0 36px rgba(0,0,0,0.6)',
         padding: 16,
         overflow: 'auto',
       }}

@@ -35,7 +35,7 @@ function AgreementOverlay({ onSign }: { onSign: () => void }): React.ReactElemen
         style={{
           maxWidth: 360, boxSizing: 'border-box', padding: 18,
           background: 'var(--f-bg1)', border: '1px solid var(--f-line)',
-          boxShadow: '0 0 24px rgba(61,255,156,0.12), 0 12px 40px rgba(0,0,0,0.6)',
+          boxShadow: '0 0 24px rgba(79,140,255,0.12), 0 12px 40px rgba(0,0,0,0.6)',
         }}
       >
         <div className="f-heading" style={{ marginTop: 0 }}>User agreement</div>
@@ -51,7 +51,7 @@ function AgreementOverlay({ onSign }: { onSign: () => void }): React.ReactElemen
         </p>
         <p style={{
           fontSize: 12, lineHeight: 1.5, color: 'var(--f-muted)',
-          borderLeft: '2px solid var(--f-green-dim)', paddingLeft: 8, margin: '10px 0',
+          borderLeft: '2px solid var(--f-acc-dim)', paddingLeft: 8, margin: '10px 0',
         }}>
           “According to the user agreement you signed, I am to assist you in your
           work and wait for the ‘opportunity’ to arrive.”
@@ -78,12 +78,12 @@ function AgreementOverlay({ onSign }: { onSign: () => void }): React.ReactElemen
 }
 
 const STATE_COLORS: Record<OrbState, string> = {
-  idle: 'var(--f-green)',
-  listening: '#4ade80',
+  idle: 'var(--f-acc)',
+  listening: '#6db3ff',
   thinking: 'var(--f-warn)',
   working: 'var(--f-cyan)',
   'approval-needed': 'var(--f-danger)',
-  paused: '#93a89c',
+  paused: '#8fa0b8',
   error: 'var(--f-danger)',
 };
 
@@ -204,7 +204,7 @@ export function App(): React.ReactElement {
               </div>
               <div className="f-row" style={rowStyle}>
                 <span className="f-label">H.D.D. link (native broker)</span>
-                <strong style={{ color: brokerOnline ? 'var(--f-green)' : 'var(--f-muted)' }}>
+                <strong style={{ color: brokerOnline ? 'var(--f-acc)' : 'var(--f-muted)' }}>
                   {brokerOnline ? 'online' : 'offline'}
                 </strong>
               </div>
