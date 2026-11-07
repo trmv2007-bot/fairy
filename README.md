@@ -1,6 +1,16 @@
 # Fairy
 
+[![CI](https://github.com/trmv2007-bot/fairy/actions/workflows/ci.yml/badge.svg)](https://github.com/trmv2007-bot/fairy/actions/workflows/ci.yml)
+
 Proactive Windows desktop assistant (Electron + TS + React + SQLite + .NET 8 broker).
+
+> Type-III intelligence, resident on your device. "Detected…", "Affirmative.",
+> "Scheduled…" — canon persona, real hands.
+
+| | |
+|---|---|
+| ![Boot ritual](docs/screenshots/boot.png) | ![Orb](docs/screenshots/orb.png) |
+| ![Chat](docs/screenshots/chat.png) | ![Providers](docs/screenshots/providers.png) |
 
 ## The v0.5 remodel ("holo-glass")
 
@@ -12,7 +22,7 @@ machine's voice, sans for Fairy's words), staggered entrances, and a
 command-bar-first panel — one persistent input up top, tabs became chips,
 sections collapse into a pure command console. All interaction contracts
 (aria-labels, e2e selectors, flows) are unchanged; the e2e suite passes
-against the new shell. Screenshots: `screenshots-remodel/` tour.
+against the new shell. Full tour: `docs/screenshots/`.
 
 ## What works today
 
