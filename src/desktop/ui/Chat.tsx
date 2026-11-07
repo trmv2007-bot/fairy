@@ -110,8 +110,12 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div className="f-heading" style={{ margin: 0 }}>Chat</div>
-        <span className="f-label">
-          broker: {brokerOnline ? 'online' : 'offline (optional)'}
+        <span
+          className="f-label"
+          title="Native broker — optional, chat works without it"
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          broker {brokerOnline ? 'online' : 'offline'}
         </span>
         <button type="button" className="f-btn" onClick={() => void clear()} disabled={streaming}>
           Clear

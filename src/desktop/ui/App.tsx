@@ -81,7 +81,7 @@ export function App(): React.ReactElement {
   }, []);
 
   return (
-    <div style={{ padding: 14, minHeight: '100vh', boxSizing: 'border-box' }}>
+    <div className="hud-corners" style={{ padding: 18, minHeight: '100vh', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <Orb state={state} onClick={() => setOpen(true)} />
         <div>
