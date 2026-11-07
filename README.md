@@ -135,12 +135,21 @@ already exists at boot, Fairy re-vaults the `.env` key over it, so restarts on
 keyring-less machines (and key rotations in `.env`) just work.
 
 **Groq quickstart:** the Providers panel has one-click presets (Groq / OpenAI /
-OpenRouter) that fill id, base URL and model — Groq lands as
+OpenRouter / Ollama) that fill id, base URL and model — Groq lands as
 `https://api.groq.com/openai/v1` with the current production flagship
 (`openai/gpt-oss-120b`; `llama-3.3-70b-versatile` was retired 2026-08-16).
 Paste a `gsk_…` key, tick **Included cost**, save — the key joins the pool.
 Or skip the UI entirely: put the seed block from `.env.example` (Groq example
 included) into `.env` and launch; Fairy registers the provider on boot.
+
+**Ollama (local, offline):** the Ollama preset registers
+`http://localhost:11434/v1` with **no API key at all** — keyless routes are
+accepted only for loopback/private hosts (a keyless flag on a public endpoint
+is silently dropped by the sanitizer), so nothing can pivot Fairy at someone
+else's spend. Pick the preset, tick **Included cost** (it costs nothing — the
+tick is the consent switch), make sure `ollama serve` is running, and chat
+works with zero network egress. `npm run doctor` probes it without an auth
+header and shows it as `none (local endpoint)`.
 
 **New-user tip:** chat only routes to providers marked **Included cost**
 (zero-additional-spend policy). The add-provider form defaults the data scopes

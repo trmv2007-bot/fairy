@@ -13,9 +13,34 @@ describe('provider presets', () => {
     for (const p of PROVIDER_PRESETS) {
       expect(p.endpointId.length).toBeGreaterThan(0);
       expect(p.endpointId.length).toBeLessThanOrEqual(64);
-      expect(p.baseUrl).toMatch(/^https:\/\/.{1,2000}$/i);
+      if (p.keyless === true) {
+        // Local keyless presets ride plain http on a private host only.
+        expect(p.baseUrl).toMatch(/^http:\/\/localhost/);
+      } else {
+        expect(p.baseUrl).toMatch(/^https:\/\/.{1,2000}$/i);
+      }
       expect(p.model.trim().length).toBeGreaterThan(0);
     }
+  });
+
+  it('Ollama preset is local, keyless, and offline-friendly', () => {
+    const ollama = PROVIDER_PRESETS.find(p => p.id === 'ollama');
+    expect(ollama?.baseUrl).toBe('http://localhost:11434/v1');
+    expect(ollama?.keyless).toBe(true);
+    expect(ollama?.model).not.toBe('');
+  });
+
+  it('applying the Ollama preset yields a keyless payload with no key material', () => {
+    const ollama = PROVIDER_PRESETS.find(p => p.id === 'ollama')!;
+    const payload = formToPayload({
+      ...EMPTY_FORM,
+      endpointId: ollama.endpointId,
+      baseUrl: ollama.baseUrl,
+      model: ollama.model,
+      keyless: true,
+    });
+    expect(payload.keyless).toBe(true);
+    expect('apiKey' in payload).toBe(false);
   });
 
   it('preset ids are unique', () => {

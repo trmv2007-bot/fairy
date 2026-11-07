@@ -14,6 +14,8 @@ export interface ProviderWire {
   allowedDataScopes: string[];
   model?: string;
   supportsVision?: boolean;
+  /** Local keyless endpoint (Ollama) — no credential exists or is needed. */
+  keyless?: boolean;
   /** true when a key for this handle is present in the session vault */
   keyPresent: boolean;
 }
@@ -38,6 +40,8 @@ export interface SaveProviderPayload {
   model?: string;
   includedCost: boolean;
   allowedDataScopes: string[];
+  /** Local keyless endpoint — saved without a key (loopback/private hosts only). */
+  keyless?: boolean;
 }
 
 export interface SettingsResult {

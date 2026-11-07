@@ -320,6 +320,7 @@ export class ModelGateway {
   }
 
   private resolveKey(provider: CloudProvider): string {
+    if (provider.cfg.keyless === true) return ''; // local endpoint (Ollama) — no credential exists
     if (this.secretResolver === null) {
       throw new CloudRouteError('gateway has no secret resolver configured');
     }

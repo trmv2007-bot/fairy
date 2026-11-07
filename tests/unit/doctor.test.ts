@@ -158,3 +158,39 @@ describe('fairy-doctor', () => {
     expect(text).toContain('vaulted');
   });
 });
+
+describe('fairy-doctor · keyless local endpoints', () => {
+  it('probes keyless endpoints without an auth header and reports them honestly', async () => {
+    let sawAuth: string | undefined;
+    const fetchImpl = (async (_url: string | URL, init?: { headers?: Record<string, string> }) => {
+      sawAuth = init?.headers?.authorization;
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const r = await probeProvider(
+      { endpointId: 'ollama', baseUrl: 'http://localhost:11434/v1', keyless: true },
+      undefined,
+      { fetchImpl },
+    );
+    expect(sawAuth).toBeUndefined();
+    expect(r.verdict).toBe('ok');
+    expect(r.keyPresent).toBe(true);
+    const text = formatReport({
+      configOk: true, encryptionAvailable: true, persistedKeys: 0, pool: ['ollama'],
+      journalAvailable: true, providers: [r], overallOk: true,
+    });
+    expect(text).toContain('none (local endpoint)');
+  });
+
+  it('a keyless provider alone makes overallOk achievable (offline-capable)', async () => {
+    const report = await runDoctor({
+      providers: [{ endpointId: 'ollama', baseUrl: 'http://localhost:11434/v1', authHandle: '', keyless: true }],
+      resolveKey: () => undefined,
+      encryptionAvailable: true,
+      persistedKeys: 0,
+      journalAvailable: true,
+      pool: ['ollama'],
+      probeOpts: { fetchImpl: okFetch() },
+    });
+    expect(report.overallOk).toBe(true);
+  });
+});

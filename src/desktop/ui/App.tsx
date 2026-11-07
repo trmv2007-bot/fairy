@@ -562,7 +562,7 @@ export function App(): React.ReactElement {
                           <strong>{p.endpointId}</strong>
                           <br />
                           <span style={{ color: 'var(--f-muted)', fontSize: 12 }}>
-                            {p.baseUrl} · {p.model ?? 'default model'} · {p.keyPresent ? 'key vaulted' : 'no key this session'}
+                            {p.baseUrl} · {p.model ?? 'default model'} · {p.keyless ? 'local · no key' : p.keyPresent ? 'key vaulted' : 'no key this session'}
                           </span>
                         </span>
                       </label>

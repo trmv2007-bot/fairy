@@ -15,6 +15,12 @@ export interface CloudProviderConfig {
   allowedDataScopes: string[];
   model?: string;
   supportsVision?: boolean;
+  /**
+   * Keyless route (v0.6): local OpenAI-compatible endpoints (Ollama) that need
+   * no credential. sanitizeProvider only permits this for loopback/private
+   * hosts — a keyless route to a public endpoint is silently downgraded.
+   */
+  keyless?: boolean;
 }
 
 /** One model-invoked tool call (OpenAI function-calling wire format). */
@@ -202,7 +208,9 @@ export class CloudProvider {
       throw new CloudRouteError('no included-cost route available; blocked (zero-additional-spend)');
     }
     const apiKey = opts.apiKey;
-    if (!apiKey) throw new CloudRouteError(`no API key resolved for provider '${this.cfg.endpointId}'`);
+    if (!apiKey && this.cfg.keyless !== true) {
+      throw new CloudRouteError(`no API key resolved for provider '${this.cfg.endpointId}'`);
+    }
 
     const res = await this.post(
       messages,
@@ -245,7 +253,9 @@ export class CloudProvider {
       throw new CloudRouteError('no included-cost route available; blocked (zero-additional-spend)');
     }
     const apiKey = opts.apiKey;
-    if (!apiKey) throw new CloudRouteError(`no API key resolved for provider '${this.cfg.endpointId}'`);
+    if (!apiKey && this.cfg.keyless !== true) {
+      throw new CloudRouteError(`no API key resolved for provider '${this.cfg.endpointId}'`);
+    }
 
     const res = await this.post(messages, { ...opts, stream: true }, STREAM_IDLE_TIMEOUT_MS);
     if (!res.ok) {

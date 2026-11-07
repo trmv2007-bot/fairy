@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadConfig, sanitizeProvider, sanitizeConfigForPersist, effectivePool } from '../../src/providers/config.js';
+import { loadConfig, sanitizeProvider, sanitizeConfigForPersist, effectivePool, isPrivateHttpHost } from '../../src/providers/config.js';
 import { SettingsStore } from '../../src/storage/settings.js';
 
 describe('loadConfig sanitization', () => {
@@ -167,5 +167,37 @@ describe('activeProviderIds (key pool, v0.4)', () => {
     const cfg = loadConfig({ cloudProviders: providers, activeProviderIds: ['a', 'b'] });
     store.save(cfg);
     expect(store.load().activeProviderIds).toEqual(['a', 'b']);
+  });
+});
+
+describe('keyless local routes (v0.6, Ollama)', () => {
+  it('keeps keyless on loopback/private hosts', () => {
+    const p = sanitizeProvider({ endpointId: 'ollama', baseUrl: 'http://localhost:11434/v1', authHandle: '', includedCost: true, allowedDataScopes: ['public'], keyless: true });
+    expect(p?.keyless).toBe(true);
+    const lan = sanitizeProvider({ endpointId: 'lan-llm', baseUrl: 'http://192.168.1.50:11434/v1', authHandle: '', includedCost: true, allowedDataScopes: ['public'], keyless: true });
+    expect(lan?.keyless).toBe(true);
+  });
+
+  it('silently downgrades keyless on public hosts (no unauthenticated cloud routes)', () => {
+    const p = sanitizeProvider({ endpointId: 'evil', baseUrl: 'https://api.example.com/v1', authHandle: '', includedCost: true, allowedDataScopes: ['public'], keyless: true });
+    expect(p?.keyless).toBeUndefined();
+  });
+
+  it('round-trips keyless through persistence (no secret-stripping collision)', () => {
+    const store = new SettingsStore(join(tmpdir(), `fairy-keyless-${randomUUID()}.json`));
+    const cfg = loadConfig({ cloudProviders: [{ endpointId: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1', authHandle: '', includedCost: true, allowedDataScopes: ['public', 'internal'], keyless: true }] });
+    store.save(cfg);
+    expect(store.load().cloudProviders[0]?.keyless).toBe(true);
+    expect(store.load().cloudProviders[0]?.authHandle).toBe('');
+  });
+
+  it('isPrivateHttpHost classification', () => {
+    expect(isPrivateHttpHost('http://localhost:11434/v1')).toBe(true);
+    expect(isPrivateHttpHost('http://127.0.0.1:8080')).toBe(true);
+    expect(isPrivateHttpHost('http://10.0.0.5/v1')).toBe(true);
+    expect(isPrivateHttpHost('http://172.16.0.1/v1')).toBe(true);
+    expect(isPrivateHttpHost('http://172.32.0.1/v1')).toBe(false);
+    expect(isPrivateHttpHost('https://api.groq.com/v1')).toBe(false);
+    expect(isPrivateHttpHost('not a url')).toBe(false);
   });
 });

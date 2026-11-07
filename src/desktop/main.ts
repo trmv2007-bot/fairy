@@ -312,6 +312,7 @@ function toWire(cfg: ReturnType<typeof loadConfig>): PersistedConfigWire {
       allowedDataScopes: [...p.allowedDataScopes],
       ...(p.model !== undefined ? { model: p.model } : {}),
       ...(p.supportsVision === true ? { supportsVision: true } : {}),
+      ...(p.keyless === true ? { keyless: true } : {}),
       keyPresent: p.authHandle !== '' && vault.resolve(p.authHandle) !== undefined,
     })),
     ...(cfg.selectedProviderId !== undefined ? { selectedProviderId: cfg.selectedProviderId } : {}),
@@ -420,6 +421,9 @@ ipcMain.handle('settings:saveProvider', (_event, raw: unknown): SettingsResult =
     }
   } else if (existing) {
     p.authHandle = existing.authHandle;
+  } else if (p.keyless === true) {
+    // Local keyless endpoint (Ollama): registers with no credential at all.
+    p.authHandle = '';
   } else {
     return { ok: false, error: 'new provider requires an API key' };
   }
@@ -687,6 +691,7 @@ if (!gotLock) {
           endpointId: p.endpointId,
           baseUrl: p.baseUrl,
           ...(p.model !== undefined ? { model: p.model } : {}),
+          ...(p.keyless === true ? { keyless: true } : {}),
           authHandle: p.authHandle,
         })),
         resolveKey: (handle) => vault.resolve(handle),

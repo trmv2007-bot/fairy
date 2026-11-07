@@ -22,6 +22,8 @@ export interface DoctorProviderCore {
   endpointId: string;
   baseUrl: string;
   model?: string;
+  /** Local keyless endpoint (Ollama) — probed WITHOUT an auth header. */
+  keyless?: boolean;
 }
 
 export interface DoctorProviderInput extends DoctorProviderCore {
@@ -76,7 +78,7 @@ export async function probeProvider(
 ): Promise<DoctorProviderReport> {
   const base: DoctorProviderReport = {
     ...p,
-    keyPresent: typeof key === 'string' && key.length > 0,
+    keyPresent: p.keyless === true || (typeof key === 'string' && key.length > 0),
     verdict: 'bad-config',
     detail: '',
   };
@@ -97,7 +99,9 @@ export async function probeProvider(
   try {
     const res = await fetchImpl(url, {
       method: 'GET',
-      headers: { authorization: `Bearer ${key}` },
+      // Keyless local endpoints get no auth header — sending one would probe
+      // the wrong thing (and leak a credential-shaped string to a local server).
+      headers: p.keyless === true ? {} : { authorization: `Bearer ${key}` },
       signal: controller.signal,
     });
     const latencyMs = Date.now() - started;
@@ -147,7 +151,12 @@ export async function runDoctor(env: DoctorEnv): Promise<DoctorReport> {
   for (const p of env.providers) {
     providers.push(
       await probeProvider(
-        { endpointId: p.endpointId, baseUrl: p.baseUrl, ...(p.model !== undefined ? { model: p.model } : {}) },
+        {
+          endpointId: p.endpointId,
+          baseUrl: p.baseUrl,
+          ...(p.model !== undefined ? { model: p.model } : {}),
+          ...(p.keyless === true ? { keyless: true } : {}),
+        },
         env.resolveKey(p.authHandle),
         env.probeOpts,
       ),
@@ -192,7 +201,7 @@ export function formatReport(r: DoctorReport): string {
     lines.push('');
     lines.push(`  ${p.endpointId}`);
     lines.push(`    endpoint .... ${p.baseUrl}${p.model ? ` · ${p.model}` : ''}`);
-    lines.push(`    key ......... ${p.keyPresent ? 'vaulted' : 'missing'}`);
+    lines.push(`    key ......... ${p.keyless === true ? 'none (local endpoint)' : p.keyPresent ? 'vaulted' : 'missing'}`);
     const latency = p.latencyMs !== undefined ? ` in ${p.latencyMs}ms` : '';
     lines.push(`    probe ....... ${VERDICT_MARK[p.verdict]}${p.httpStatus !== undefined ? ` (HTTP ${p.httpStatus})` : ''}${latency} — ${p.detail}`);
   }

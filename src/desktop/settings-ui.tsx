@@ -11,22 +11,26 @@ export interface ProviderForm {
   model: string;
   includedCost: boolean;
   allowedDataScopes: string; // comma-separated text field
+  /** Local keyless endpoint (Ollama) — saved without a key. */
+  keyless: boolean;
 }
 
 // Default scopes must cover what chat actually requests ('public', 'internal') —
 // otherwise a freshly added provider can never route and chat fails for new users.
 export const EMPTY_FORM: ProviderForm = {
-  endpointId: '', baseUrl: '', apiKey: '', model: '', includedCost: false, allowedDataScopes: 'public, internal',
+  endpointId: '', baseUrl: '', apiKey: '', model: '', includedCost: false, allowedDataScopes: 'public, internal', keyless: false,
 };
 
-/** One-click fill for known OpenAI-compatible endpoints (v0.5). The key is still
- *  typed by hand — presets never touch credentials. */
+/** One-click fill for known endpoints (v0.5 presets, v0.6 adds Ollama). The
+ *  key is still typed by hand — presets never touch credentials. */
 export interface ProviderPreset {
   id: string;
   label: string;
   endpointId: string;
   baseUrl: string;
   model: string;
+  /** Local keyless preset — no API key field required. */
+  keyless?: boolean;
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -35,6 +39,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   { id: 'groq', label: 'Groq', endpointId: 'groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b' },
   { id: 'openai', label: 'OpenAI', endpointId: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
   { id: 'openrouter', label: 'OpenRouter', endpointId: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-oss-120b' },
+  // Local, offline, free: Ollama speaks the OpenAI dialect on localhost.
+  // Keyless by design — sanitizeProvider keeps keyless only for private hosts.
+  { id: 'ollama', label: 'Ollama (local)', endpointId: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'gpt-oss:20b', keyless: true },
 ];
 
 export function formToPayload(form: ProviderForm): SaveProviderPayload {
@@ -45,6 +52,7 @@ export function formToPayload(form: ProviderForm): SaveProviderPayload {
     ...(model === '' ? {} : { model }),
     includedCost: form.includedCost,
     allowedDataScopes: form.allowedDataScopes.split(',').map(s => s.trim()).filter(s => s.length > 0),
+    ...(form.keyless ? { keyless: true } : {}),
     ...(form.apiKey.trim() === '' ? {} : { apiKey: form.apiKey.trim() }),
   };
 }
@@ -63,9 +71,9 @@ export function SettingsPanel({ onSave, saving }: { onSave: (p: SaveProviderPayl
               type="button"
               className="f-chip"
               style={{ padding: '3px 11px' }}
-              title={`${p.baseUrl} · ${p.model}`}
+              title={`${p.baseUrl} · ${p.model}${p.keyless ? ' · no API key needed' : ''}`}
               aria-label={`Use ${p.label} preset`}
-              onClick={() => set({ endpointId: p.endpointId, baseUrl: p.baseUrl, model: p.model })}
+              onClick={() => set({ endpointId: p.endpointId, baseUrl: p.baseUrl, model: p.model, keyless: p.keyless === true, apiKey: p.keyless === true ? '' : form.apiKey })}
             >
               {p.label}
             </button>
@@ -82,7 +90,20 @@ export function SettingsPanel({ onSave, saving }: { onSave: (p: SaveProviderPayl
       </label>
       <label>
         <span className="f-label">API key (encrypted by the OS, restored on next launch)</span>
-        <input className="f-input" style={{ marginTop: 3 }} type="password" value={form.apiKey} onChange={e => set({ apiKey: e.target.value })} />
+        <input
+          className="f-input"
+          style={{ marginTop: 3 }}
+          type="password"
+          value={form.apiKey}
+          disabled={form.keyless}
+          placeholder={form.keyless ? 'not needed — local endpoint' : undefined}
+          onChange={e => set({ apiKey: e.target.value })}
+        />
+        {form.keyless && (
+          <span className="f-label" style={{ display: 'block', marginTop: 3, color: 'var(--f-cyan)' }}>
+            Local keyless endpoint — nothing is vaulted, nothing leaves the machine.
+          </span>
+        )}
       </label>
       <label>
         <span className="f-label">Model (optional)</span>

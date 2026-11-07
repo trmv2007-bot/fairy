@@ -64,3 +64,21 @@ describe('CloudProvider.complete', () => {
     await expect(p.complete('ping', { apiKey: 'sk-1' })).rejects.toThrow(/missing completion content/);
   });
 });
+
+describe('keyless local chat (v0.6, Ollama)', () => {
+  it('chats with no API key when keyless is set', async () => {
+    const p = new CloudProvider({ ...baseCfg(), keyless: true, baseUrl: 'http://localhost:11434/v1' }, okFetch());
+    const res = await p.complete('ping', {});
+    expect(res.content).toBe('pong');
+  });
+
+  it('still refuses keyless without included-cost consent', async () => {
+    const p = new CloudProvider({ ...baseCfg(), keyless: true, includedCost: false }, okFetch());
+    await expect(p.complete('ping', {})).rejects.toThrow(/zero-additional-spend/);
+  });
+
+  it('non-keyless providers still require a key', async () => {
+    const p = new CloudProvider(baseCfg(), okFetch());
+    await expect(p.complete('ping', {})).rejects.toThrow(/no API key resolved/);
+  });
+});

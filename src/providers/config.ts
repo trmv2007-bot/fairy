@@ -36,6 +36,31 @@ function sanitizeScopes(raw: unknown): string[] {
   return scopes.length > 0 ? scopes : ['public'];
 }
 
+/**
+ * Keyless routes (v0.6, Ollama) are only meaningful for endpoints an attacker
+ * cannot use as an exfil pivot paid by someone else: loopback and RFC1918
+ * private hosts. Anything public silently loses the flag.
+ */
+export function isPrivateHttpHost(baseUrl: string): boolean {
+  try {
+    const u = new URL(baseUrl);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    const host = u.hostname.toLowerCase();
+    if (host === 'localhost' || host === '::1' || host.endsWith('.local') || host.endsWith('.localhost')) return true;
+    if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (m) {
+      const [a, b] = [Number(m[1]), Number(m[2])];
+      if (a === 10) return true;
+      if (a === 192 && b === 168) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /** Validate one provider entry; returns null for anything malformed. */
 export function sanitizeProvider(item: unknown): CloudProviderConfig | null {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
@@ -57,6 +82,7 @@ export function sanitizeProvider(item: unknown): CloudProviderConfig | null {
     cfg.model = it.model.trim();
   }
   if (it.supportsVision === true) cfg.supportsVision = true;
+  if (it.keyless === true && isPrivateHttpHost(baseUrl)) cfg.keyless = true;
   return cfg;
 }
 
