@@ -175,12 +175,22 @@ spend is encoded in the cloud route.
 ## Packaging
 
 ```powershell
-npm run build
-npx electron-builder --win nsis
+npm run dist:win     # NSIS installer (or dist for win+mac+linux)
+npm run dist:dir     # unpacked build — fastest way to sanity-check the package
 ```
 
-`electron-builder.yml` unpacks native `.node` modules from the asar so
-better-sqlite3 loads correctly in the packaged app.
+`electron-builder.yml` ships the whole `dist/` tree (tsc emits every module the
+main process imports — a partial file list breaks ESM resolution inside the
+asar) and unpacks native `.node` modules so better-sqlite3 loads in the
+packaged app. Verify a package in one command, no GUI needed:
+
+```powershell
+./release/linux-unpacked/fairy --doctor    # prints the probe report and exits
+```
+
+Tag a release (`git tag v0.6.0 && git push --tags`) and the **Release**
+workflow builds the NSIS installer, DMG and AppImage on their native runners
+and attaches them to the GitHub Release.
 
 ## Roadmap
 

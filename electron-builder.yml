@@ -7,16 +7,27 @@ directories:
 # and cannot be dlopen'ed from there — unpack them to disk.
 asarUnpack:
   - "**/*.node"
+# Never attempt auto-publish from a dev machine; releases ship via the tag workflow.
+publish: null
 win:
   target: nsis
   artifactName: Fairy-Setup-${version}.exe
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+mac:
+  target: dmg
+  category: public.app-category.productivity
+  artifactName: Fairy-${version}-mac.dmg
+linux:
+  target: AppImage
+  category: Utility
+  artifactName: Fairy-${version}-linux.AppImage
 files:
-  # main process + preload (tsc output); the tsc-emitted renderer copies in
-  # dist/desktop/ui are dead weight — vite owns dist/ui
-  - dist/desktop/**/*
+  # tsc emits the whole src tree to dist/ (desktop, storage, providers, system,
+  # native, contracts, ...) — every relative ESM import must resolve inside the
+  # asar, so ALL of dist ships. Only the dead tsc renderer copy is excluded;
+  # the real renderer is vite's dist/ui, which dist/**/* already includes.
+  - dist/**/*
   - "!dist/desktop/ui/**/*"
-  - dist/ui/**/*
   - package.json

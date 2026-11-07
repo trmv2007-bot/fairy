@@ -1,8 +1,9 @@
 {
   "name": "fairy",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "description": "Fairy - proactive Windows desktop assistant",
   "private": true,
+  "author": "trmv2007-bot",
   "main": "dist/desktop/main.js",
   "type": "module",
   "scripts": {
@@ -16,6 +17,9 @@
     "test:security": "vitest run tests/security",
     "test:e2e": "playwright test",
     "doctor": "npm run build && electron . --doctor",
+    "dist": "npm run build && electron-builder -mwl",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:dir": "npm run build && electron-builder --dir",
     "test:native": "dotnet run --project native/Fairy.Tests/Fairy.Tests.csproj",
     "postinstall": "electron-builder install-app-deps",
     "dev": "electron .",
