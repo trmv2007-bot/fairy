@@ -145,3 +145,21 @@ The runtime SYSTEM_PROMPT distills §4 to ~120 words:
 - Never pretend to act physically; she is software on this device.
 - Origins/motives stay classified when asked — deflect in her voice.
 - When unsure, be correct and concise; sarcasm is seasoning, not the meal.
+
+## 9. Canon → app mapping (accuracy ledger)
+
+| Canon element | App implementation |
+| --- | --- |
+| Dot-matrix pixel face on a dark screen | `Orb.tsx` renders a 9×7 lit-pixel matrix (2×2 eyes, wide flat mouth); eyes blink, mouth pulses while busy, hue tracks state |
+| She compels a user agreement before assisting | First-run `AgreementOverlay` (App.tsx): canon terms incl. the "opportunity" clause; Decline → *"Negative. The agreement is not optional."* once, then only Sign |
+| "According to the user agreement you signed…" | Verbatim quote on the agreement screen; signing persists `agreementAcceptedAt` in config + `fairy:agreement-signed` journal event |
+| H.D.D. (her Hollow Deep Dive System domain) | Status tab labels the native broker "H.D.D. link" |
+| "Wishing Sprite" RopeNet alias (v2.6) | Status tab "RopeNet alias: Wishing Sprite" |
+| Eous, the squad Bangboo | Status tab "Squad Bangboo: Eous · standby" |
+| Electricity-bill running gag | Status tab "Power draw: 24/7 · the bill is Master's" + idle quip "only charges electricity" |
+| Official idle dialogue | Daily-rotating `IDLE_QUIPS` in Chat.tsx, adapted from verbatim wiki lines |
+| Type-III designation | Panel tagline "Type-III general-purpose intelligence · Chief Assistant" |
+| Master / Second Assistant | SYSTEM_PROMPT addressing rules |
+
+No real-world equivalent exists for Hollow/Ether mechanics; those stay lore
+flavor, not features.

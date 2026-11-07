@@ -18,6 +18,8 @@ export interface PersistedConfigWire {
   cloudProviders: ProviderWire[];
   selectedProviderId?: string;
   allowLocalModels: boolean;
+  /** ISO timestamp of the user-agreement signing; absent until the user signs. */
+  agreementAcceptedAt?: string;
 }
 
 export interface SaveProviderPayload {
@@ -77,6 +79,8 @@ export interface FairyBridge {
     saveProvider(p: SaveProviderPayload): Promise<SettingsResult>;
     deleteProvider(id: string): Promise<SettingsResult>;
     selectProvider(id: string | null): Promise<SettingsResult>;
+    /** Records the user-agreement signing (idempotent; journal event + persisted timestamp). */
+    acceptAgreement(): Promise<SettingsResult>;
   };
   chat: {
     /** Send one user turn; resolves with the final assistant message. Deltas arrive via onChunk. */

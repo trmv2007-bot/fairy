@@ -55,6 +55,15 @@ describe('loadConfig sanitization', () => {
     expect(loadConfig({ allowLocalModels: 'yes' }).allowLocalModels).toBe(false);
     expect(loadConfig({ allowLocalModels: true }).allowLocalModels).toBe(true);
   });
+
+  it('round-trips a well-formed agreement timestamp, drops malformed ones', () => {
+    const good = '2026-11-07T05:41:00.000Z';
+    expect(loadConfig({ agreementAcceptedAt: good }).agreementAcceptedAt).toBe(good);
+    expect(loadConfig({}).agreementAcceptedAt).toBeUndefined();
+    expect(loadConfig({ agreementAcceptedAt: 'yes' }).agreementAcceptedAt).toBeUndefined();
+    expect(loadConfig({ agreementAcceptedAt: '2026-11-07 lies' }).agreementAcceptedAt).toBeUndefined();
+    expect(loadConfig({ agreementAcceptedAt: 42 }).agreementAcceptedAt).toBeUndefined();
+  });
 });
 
 describe('sanitizeConfigForPersist', () => {

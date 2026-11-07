@@ -12,7 +12,7 @@ const COLORS: Record<OrbState, string> = {
   error: 'var(--f-danger)',
 };
 
-/** Mono caption shown next to the eye, Fairy-voice readout per state. */
+/** Mono caption shown next to the face, Fairy-voice readout per state. */
 export const STATE_LABELS: Record<OrbState, string> = {
   idle: 'online',
   listening: 'listening',
@@ -29,10 +29,61 @@ export interface OrbProps {
   onClick?: () => void;
 }
 
-/** The Fairy eye: a glowing iris that watches, blinks, and changes hue with state. */
+/**
+ * Canon Fairy avatar (v1.0 era): a dot-matrix pixel face on a dark round
+ * screen — two rectangular eyes, one wide flat mouth — rendered as a lit-pixel
+ * matrix. '#' = lit pixel. The face keeps the aria-label contract of the old
+ * orb (tests + screen readers unchanged).
+ */
+const FACE = [
+  '.........',
+  '.##...##.',
+  '.##...##.',
+  '.........',
+  '.#######.',
+  '.........',
+  '.........',
+] as const;
+
+const COLS = FACE[0]!.length;
+const EYE_CELLS = new Set<string>([
+  '1,1', '2,1', '6,1', '7,1',
+  '1,2', '2,2', '6,2', '7,2',
+]);
+
+/** The Fairy face: dot-matrix pixels that blink (eyes) and pulse (mouth, while busy). */
 export function Orb({ state, label, onClick }: OrbProps): React.ReactElement {
   const c = COLORS[state];
   const busy = state === 'thinking' || state === 'working';
+  const cells: React.ReactElement[] = [];
+  FACE.forEach((row, y) => {
+    [...row].forEach((ch, x) => {
+      const key = `${x},${y}`;
+      const isEye = EYE_CELLS.has(key);
+      const isMouth = ch === '#' && y === 4;
+      const lit = ch === '#';
+      const cls = !lit
+        ? 'f-px f-px-off'
+        : isEye
+          ? 'f-px f-px-eye'
+          : isMouth && busy
+            ? 'f-px f-px-mouth'
+            : 'f-px';
+      cells.push(
+        <span
+          key={key}
+          className={cls}
+          style={{
+            width: 7,
+            height: 7,
+            background: lit ? c : 'rgba(111, 207, 161, 0.10)',
+            boxShadow: lit ? `0 0 5px ${c}88` : 'none',
+            animationDelay: isEye ? `${(x * 13 + y * 7) % 90}ms` : undefined,
+          }}
+        />,
+      );
+    });
+  });
   return (
     <button
       type="button"
@@ -40,37 +91,24 @@ export function Orb({ state, label, onClick }: OrbProps): React.ReactElement {
       onClick={onClick}
       title={`Fairy: ${STATE_LABELS[state]}`}
       style={{
-        width: 72,
+        width: 84,
         height: 72,
-        borderRadius: '50%',
-        position: 'relative',
+        borderRadius: 10,
         cursor: 'pointer',
         flexShrink: 0,
+        display: 'grid',
+        gridTemplateColumns: `repeat(${COLS}, 1fr)`,
+        alignContent: 'center',
+        justifyItems: 'center',
+        gap: 1,
+        padding: 6,
+        boxSizing: 'border-box',
         background: 'radial-gradient(circle at 50% 42%, #10241a 0%, #060d09 72%)',
         border: `2px solid ${c}`,
         boxShadow: `0 0 16px ${c}44, inset 0 0 14px ${c}22`,
       }}
     >
-      {/* iris ring */}
-      <span style={{ position: 'absolute', inset: 12, borderRadius: '50%', border: `1px solid ${c}55` }} />
-      {/* lens */}
-      <span
-        style={{
-          position: 'absolute', left: 9, right: 9, top: '50%', height: 26,
-          transform: 'translateY(-50%)', borderRadius: '50%',
-          border: `1.5px solid ${c}`,
-          background: `linear-gradient(180deg, ${c}26, transparent 75%)`,
-        }}
-      />
-      {/* pupil (blinks; races while busy) */}
-      <span
-        className={busy ? 'f-pupil f-pupil-fast' : 'f-pupil'}
-        style={{
-          position: 'absolute', left: '50%', top: '50%', width: 12, height: 12,
-          borderRadius: '50%', background: c,
-          boxShadow: `0 0 10px ${c}, 0 0 22px ${c}66`,
-        }}
-      />
+      {cells}
     </button>
   );
 }

@@ -8,6 +8,8 @@ export interface FairyConfig {
   selectedProviderId?: string;
   // local models disabled by default (cloud-only mode)
   allowLocalModels: boolean;
+  /** ISO timestamp of the user-agreement signing (canon: Fairy compels the contract). */
+  agreementAcceptedAt?: string;
 }
 
 export const DEFAULT_CONFIG: FairyConfig = {
@@ -65,10 +67,17 @@ export function loadConfig(raw: unknown): FairyConfig {
   const selected = selectedRaw !== undefined && providers.some(p => p.endpointId === selectedRaw)
     ? selectedRaw
     : undefined;
+  // Agreement timestamp: accept only ISO-8601-shaped strings, capped for safety.
+  const agreementAcceptedAt = typeof r.agreementAcceptedAt === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(r.agreementAcceptedAt)
+    && r.agreementAcceptedAt.length <= 40
+    ? r.agreementAcceptedAt
+    : undefined;
   const cfg: FairyConfig = {
     cloudProviders: providers,
     allowLocalModels: r.allowLocalModels === true, // policy: stays false in cloud-only mode
     ...(selected !== undefined ? { selectedProviderId: selected } : {}),
+    ...(agreementAcceptedAt !== undefined ? { agreementAcceptedAt } : {}),
   };
   return cfg;
 }

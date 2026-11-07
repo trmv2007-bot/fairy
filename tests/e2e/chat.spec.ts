@@ -61,6 +61,12 @@ test('chat round trip streams a reply through the real UI', async () => {
   });
   const window = await app.firstWindow();
 
+  // canon boot gate: sign Fairy's user agreement before interacting
+  const signBtn = window.getByRole('button', { name: 'Sign the agreement' });
+  await signBtn.waitFor({ state: 'visible', timeout: 15_000 });
+  await signBtn.click();
+  await signBtn.waitFor({ state: 'detached', timeout: 5_000 });
+
   const orb = window.locator('button[aria-label^="Fairy orb"]');
   await expect(orb).toBeVisible({ timeout: 15_000 });
   await orb.click();
@@ -115,6 +121,13 @@ test('chat surfaces provider errors instead of dying', async () => {
     },
   });
   const window = await app.firstWindow();
+
+  // canon boot gate: sign Fairy's user agreement before interacting
+  const signBtn = window.getByRole('button', { name: 'Sign the agreement' });
+  await signBtn.waitFor({ state: 'visible', timeout: 15_000 });
+  await signBtn.click();
+  await signBtn.waitFor({ state: 'detached', timeout: 5_000 });
+
   const orb = window.locator('button[aria-label^="Fairy orb"]');
   await expect(orb).toBeVisible({ timeout: 15_000 });
   await orb.click();

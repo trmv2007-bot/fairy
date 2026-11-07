@@ -26,6 +26,7 @@ const bridge: FairyBridge = {
     saveProvider: (p: SaveProviderPayload) => ipcRenderer.invoke('settings:saveProvider', p),
     deleteProvider: (id: string) => ipcRenderer.invoke('settings:deleteProvider', id),
     selectProvider: (id: string | null) => ipcRenderer.invoke('settings:selectProvider', id),
+    acceptAgreement: () => ipcRenderer.invoke('settings:acceptAgreement'),
   },
   chat: {
     send: (text: string) => ipcRenderer.invoke('chat:send', text),

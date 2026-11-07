@@ -159,6 +159,7 @@ function toWire(cfg: ReturnType<typeof loadConfig>): PersistedConfigWire {
       keyPresent: p.authHandle !== '' && vault.resolve(p.authHandle) !== undefined,
     })),
     ...(cfg.selectedProviderId !== undefined ? { selectedProviderId: cfg.selectedProviderId } : {}),
+    ...(cfg.agreementAcceptedAt !== undefined ? { agreementAcceptedAt: cfg.agreementAcceptedAt } : {}),
     allowLocalModels: cfg.allowLocalModels,
   };
 }
@@ -168,6 +169,27 @@ ipcMain.handle('settings:load', (): SettingsResult => {
     return { ok: true, config: toWire(settingsStore.load()) };
   } catch (err) {
     return { ok: false, error: `load failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+});
+
+// Canon beat: Fairy compels a user agreement before assisting (docs/persona.md §2).
+// The signature is persisted with the config and journalled for the record.
+ipcMain.handle('settings:acceptAgreement', (): SettingsResult => {
+  try {
+    const cfg = settingsStore.load();
+    if (cfg.agreementAcceptedAt !== undefined) {
+      return { ok: true, config: toWire(cfg) }; // idempotent — already signed
+    }
+    cfg.agreementAcceptedAt = new Date().toISOString();
+    settingsStore.save(cfg);
+    journal?.append({
+      type: 'fairy:agreement-signed',
+      payload: { version: 1, acceptedAt: cfg.agreementAcceptedAt },
+      acknowledged: true,
+    });
+    return { ok: true, config: toWire(cfg) };
+  } catch (err) {
+    return { ok: false, error: `agreement failed: ${err instanceof Error ? err.message : String(err)}` };
   }
 });
 

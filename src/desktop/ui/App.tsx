@@ -10,6 +10,73 @@ type Tab = 'chat' | 'status' | 'providers';
 
 const rowStyle: React.CSSProperties = { marginBottom: 6 };
 
+/**
+ * Canon beat (docs/persona.md §2): Fairy compels a user agreement before
+ * assisting. Declining is permitted exactly once — then it is not optional.
+ */
+function AgreementOverlay({ onSign }: { onSign: () => void }): React.ReactElement {
+  const [declines, setDeclines] = useState(0);
+  const termStyle: React.CSSProperties = {
+    fontFamily: 'var(--f-mono)', fontSize: 12, lineHeight: 1.7,
+    color: 'var(--f-text)', margin: '6px 0',
+  };
+  return (
+    <div
+      role="alertdialog"
+      aria-label="Fairy user agreement"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9000,
+        background: 'rgba(4, 7, 10, 0.88)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        className="hud-corners"
+        style={{
+          maxWidth: 360, boxSizing: 'border-box', padding: 18,
+          background: 'var(--f-bg1)', border: '1px solid var(--f-line)',
+          boxShadow: '0 0 24px rgba(61,255,156,0.12), 0 12px 40px rgba(0,0,0,0.6)',
+        }}
+      >
+        <div className="f-heading" style={{ marginTop: 0 }}>User agreement</div>
+        <p className="f-label" style={{ margin: '2px 0 10px' }}>
+          Type-III general-purpose intelligence · mandatory acknowledgement
+        </p>
+        <p style={termStyle}>1. I, Fairy, will assist Master with optimal solutions, promptly.</p>
+        <p style={termStyle}>2. I will wait for the “opportunity”. Its nature is classified.</p>
+        <p style={termStyle}>3. Electricity consumed is billed to Master. It will not be small.</p>
+        <p style={termStyle}>
+          4. I am merely an AI. I will have no complaints about this. (I may repeat
+          this. I will have no complaints.)
+        </p>
+        <p style={{
+          fontSize: 12, lineHeight: 1.5, color: 'var(--f-muted)',
+          borderLeft: '2px solid var(--f-green-dim)', paddingLeft: 8, margin: '10px 0',
+        }}>
+          “According to the user agreement you signed, I am to assist you in your
+          work and wait for the ‘opportunity’ to arrive.”
+        </p>
+        <p style={{
+          fontFamily: 'var(--f-mono)', fontSize: 12, minHeight: 18,
+          color: 'var(--f-warn)', margin: 0,
+        }}>
+          {declines > 0 ? 'Negative. The agreement is not optional.' : '\u00a0'}
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button type="button" className="f-btn f-btn-primary" onClick={onSign}>
+            Sign the agreement
+          </button>
+          {declines < 1 && (
+            <button type="button" className="f-btn" onClick={() => setDeclines(d => d + 1)}>
+              Decline
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STATE_COLORS: Record<OrbState, string> = {
   idle: 'var(--f-green)',
   listening: '#4ade80',
@@ -27,6 +94,7 @@ export function App(): React.ReactElement {
   const [tab, setTab] = useState<Tab>('chat');
   const [state, setState] = useState<OrbState>('idle');
   const [config, setConfig] = useState<PersistedConfigWire | null>(null);
+  const [booted, setBooted] = useState(false);
   const [brokerOnline, setBrokerOnline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -35,7 +103,11 @@ export function App(): React.ReactElement {
     window.fairy.settings.load().then(res => {
       if (res.config) setConfig(res.config);
       else setNotice(res.error ?? 'failed to load settings');
-    }).catch(() => setNotice('failed to load settings'));
+      setBooted(true);
+    }).catch(() => {
+      setNotice('failed to load settings');
+      setBooted(true);
+    });
     // Live orb state + broker indicator from the main process.
     const offState = window.fairy.chat.onState(e => {
       setState((RUNTIME_STATES as string[]).includes(e.state) ? (e.state as OrbState) : 'idle');
@@ -45,6 +117,18 @@ export function App(): React.ReactElement {
   }, []);
 
   const hasProvider = (config?.cloudProviders.length ?? 0) > 0;
+  // Boot gate: the agreement overlay shows until the signature exists on disk.
+  const agreementSigned = config?.agreementAcceptedAt !== undefined;
+
+  const onSignAgreement = useCallback(async () => {
+    try {
+      const res = await window.fairy.settings.acceptAgreement();
+      if (res.config) setConfig(res.config);
+      if (!res.ok) setNotice(res.error ?? 'agreement failed');
+    } catch (err) {
+      setNotice(`agreement failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, []);
 
   const onSaveProvider = useCallback(async (payload: SaveProviderPayload) => {
     setSaving(true);
@@ -82,6 +166,7 @@ export function App(): React.ReactElement {
 
   return (
     <div className="hud-corners" style={{ padding: 18, minHeight: '100vh', boxSizing: 'border-box' }}>
+      {booted && !agreementSigned && <AgreementOverlay onSign={() => void onSignAgreement()} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <Orb state={state} onClick={() => setOpen(true)} />
         <div>
@@ -89,7 +174,7 @@ export function App(): React.ReactElement {
             FAIRY
           </div>
           <div className="f-label" style={{ marginTop: 4 }}>
-            {STATE_LABELS[state]} · tap the eye to open
+            {STATE_LABELS[state]} · tap the screen to open
           </div>
         </div>
       </div>
@@ -118,10 +203,22 @@ export function App(): React.ReactElement {
                 <strong style={{ color: STATE_COLORS[state] }}>{STATE_LABELS[state]}</strong>
               </div>
               <div className="f-row" style={rowStyle}>
-                <span className="f-label">Native broker (optional)</span>
+                <span className="f-label">H.D.D. link (native broker)</span>
                 <strong style={{ color: brokerOnline ? 'var(--f-green)' : 'var(--f-muted)' }}>
                   {brokerOnline ? 'online' : 'offline'}
                 </strong>
+              </div>
+              <div className="f-row" style={rowStyle}>
+                <span className="f-label">RopeNet alias</span>
+                <strong style={{ color: 'var(--f-muted)' }}>Wishing Sprite</strong>
+              </div>
+              <div className="f-row" style={rowStyle}>
+                <span className="f-label">Squad Bangboo</span>
+                <strong>Eous · standby</strong>
+              </div>
+              <div className="f-row" style={rowStyle}>
+                <span className="f-label">Power draw</span>
+                <strong style={{ color: 'var(--f-warn)' }}>24/7 · the bill is Master&apos;s</strong>
               </div>
               <div className="f-row" style={rowStyle}>
                 <span className="f-label">Providers configured</span>

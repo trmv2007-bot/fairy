@@ -14,6 +14,12 @@ test('shell opens, orb renders, panel + settings flow work', async () => {
   const app = await electron.launch({ args: ['.', `--user-data-dir=${freshUserData()}`] });
   const window = await app.firstWindow();
 
+  // canon boot gate: Fairy compels the user agreement on first run
+  const signBtn = window.getByRole('button', { name: 'Sign the agreement' });
+  await signBtn.waitFor({ state: 'visible', timeout: 15_000 });
+  await signBtn.click();
+  await signBtn.waitFor({ state: 'detached', timeout: 5_000 });
+
   // orb button renders
   const orb = window.locator('button[aria-label^="Fairy orb"]');
   await expect(orb).toBeVisible({ timeout: 15_000 });
@@ -26,13 +32,13 @@ test('shell opens, orb renders, panel + settings flow work', async () => {
 
   // switch to providers tab, add a provider, expect it listed
   await dialog.getByRole('button', { name: 'Providers', exact: true }).click();
-  await dialog.getByText('No providers configured yet.').waitFor();
+  await dialog.getByText('No providers registered yet.').waitFor();
 
   await dialog.locator('label:has-text("Provider id") input').fill('test-provider');
   await dialog.locator('label:has-text("Base URL") input').fill('https://api.example.com/v1');
   await dialog.locator('label:has-text("API key") input').fill('sk-e2e-test-key');
   await dialog.getByRole('button', { name: 'Save provider' }).click();
-  await expect(dialog.getByText("saved 'test-provider'")).toBeVisible();
+  await expect(dialog.getByText("registered 'test-provider'")).toBeVisible();
   await expect(dialog.getByText(/test-provider/).first()).toBeVisible();
   await expect(dialog.getByText('key vaulted')).toBeVisible();
 
@@ -42,6 +48,8 @@ test('shell opens, orb renders, panel + settings flow work', async () => {
   const configPath = join(userData, 'fairy-config.json');
   const configOnDisk = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
   expect(configOnDisk).not.toContain('sk-e2e-test-key');
+  // the agreement signature persists with the config (canon contract record)
+  expect(configOnDisk).toContain('agreementAcceptedAt');
 
   await app.close();
 });
