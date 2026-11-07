@@ -21,6 +21,7 @@ import { ModelGateway, type PoolAttemptEvent } from '../providers/gateway.js';
 import { ChatService, type ToolActivityEvent } from './chat.js';
 import { BrokerClient, BrokerClientError } from '../native/broker-client.js';
 import { ToolRegistry, buildSystemSnapshot, type SystemDeps, type SystemSnapshot } from '../system/tools.js';
+import { runDoctor, formatReport } from './doctor.js';
 import type { BrokerStateEvent, ChatChunkEvent, PersistedConfigWire, PoolStatusWire, ProviderWire, RuntimeStateEvent, SettingsResult } from './bridge.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -609,9 +610,41 @@ function seedProviderFromEnv(): void {
 }
 
 // Single-instance lock: a proactive assistant must not run twice against one state dir.
-const gotLock = app.requestSingleInstanceLock();
+// NOTE: doctor mode must be excluded from the lock — probing a running install
+// should not fight the GUI instance for the singleton.
+const doctorMode = process.argv.includes('--doctor') || process.env.FAIRY_DOCTOR === '1';
+const gotLock = doctorMode || app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
+} else if (doctorMode) {
+  // fairy-doctor: full-fidelity probe from inside Electron (OS key decryption
+  // works here). Prints the report, exits 0 when every keyed route is live.
+  app.whenReady().then(async () => {
+    try {
+      keyStore.loadInto((handle, key) => vault.store(handle, key));
+    } catch { /* probe reports what it can see */ }
+    try {
+      const cfg = settingsStore.load();
+      const report = await runDoctor({
+        providers: cfg.cloudProviders.map(p => ({
+          endpointId: p.endpointId,
+          baseUrl: p.baseUrl,
+          ...(p.model !== undefined ? { model: p.model } : {}),
+          authHandle: p.authHandle,
+        })),
+        resolveKey: (handle) => vault.resolve(handle),
+        encryptionAvailable: keyCodec.available,
+        persistedKeys: keyStore.size(),
+        journalAvailable: journal !== null,
+        pool: effectivePool(cfg),
+      });
+      console.log(formatReport(report));
+      app.exit(report.overallOk ? 0 : 1);
+    } catch (err) {
+      console.error('FAIRY DOCTOR — probe failed:', err instanceof Error ? err.message : String(err));
+      app.exit(2);
+    }
+  });
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {

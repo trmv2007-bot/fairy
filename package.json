@@ -15,6 +15,7 @@
     "test:integration": "vitest run tests/integration",
     "test:security": "vitest run tests/security",
     "test:e2e": "playwright test",
+    "doctor": "npm run build && electron . --doctor",
     "test:native": "dotnet run --project native/Fairy.Tests/Fairy.Tests.csproj",
     "postinstall": "electron-builder install-app-deps",
     "dev": "electron .",
