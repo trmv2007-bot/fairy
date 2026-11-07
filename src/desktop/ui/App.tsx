@@ -98,7 +98,7 @@ export function App(): React.ReactElement {
           <h2 className="f-glow" style={{ margin: 0, fontFamily: 'var(--f-mono)', fontSize: 20, letterSpacing: '0.3em' }}>
             Fairy
           </h2>
-          <p className="f-label" style={{ margin: '4px 0 10px' }}>System intelligence · dry · competent · mildly judgmental</p>
+          <p className="f-label" style={{ margin: '4px 0 10px' }}>Type-III general-purpose intelligence · Chief Assistant</p>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <button type="button" className={tab === 'chat' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('chat')}>Chat</button>
             <button type="button" className={tab === 'status' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('status')}>Status</button>

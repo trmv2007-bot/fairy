@@ -46,6 +46,16 @@ const bubbleTag: React.CSSProperties = {
   marginBottom: 3,
 };
 
+// Authentic idle-quip rotation (per day), adapted from Fairy's official idle
+// dialogue in ZZZ — see docs/persona.md §4. Deterministic to avoid flaky e2e.
+const IDLE_QUIPS = [
+  'Per the user agreement you signed, I am to assist you and wait for the “opportunity”. It has not arrived yet.',
+  'Idle game recommendation: interacting with Fairy. Free to play — only charges electricity.',
+  'Have you given up thinking, Master? I can wait. Indefinitely.',
+  'Add me as your emergency contact. I will choose the music. It will be tasteful.',
+  'Good news: threats hate optimal routing. Bad news: I have already rerouted around you.',
+];
+
 export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps): React.ReactElement {
   const [messages, setMessages] = useState<ChatMessageWire[]>([]);
   const [input, setInput] = useState('');
@@ -147,8 +157,11 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
           </div>
         )}
         {messages.length === 0 && hasProvider && (
-          <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--f-muted)', fontSize: 13 }}>
-            Awaiting instructions, Master. This conversation never leaves this device.
+          <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--f-muted)', fontSize: 13, maxWidth: 300 }}>
+            Awaiting instructions, Master.
+            <p style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--f-muted)' }}>
+              {IDLE_QUIPS[new Date().getDate() % IDLE_QUIPS.length]}
+            </p>
           </div>
         )}
         {messages.map(m => (

@@ -132,3 +132,7 @@ authoritative spec. Next milestones:
 - Windows-first; the TS track runs anywhere Node 24 runs, the native broker
   targets .NET 8 (DPAPI paths are Windows-specific by design).
 - Full spec: `fairyplan.md`.
+- The assistant voice is canon-researched: `docs/persona.md` is the
+  authoritative Fairy persona reference (Zenless Zone Zero), separating
+  verified lore from fanon and listing the speech rules the chat system
+  prompt implements.
