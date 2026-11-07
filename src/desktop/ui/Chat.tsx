@@ -57,6 +57,16 @@ export function Chat({ chat, hasProvider, onOpenProviders }: ChatProps): React.R
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div className="f-heading" style={{ margin: 0 }}>Chat</div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {chat.voiceSupported && (
+            <button
+              type="button"
+              className={chat.voiceOn ? 'f-chip f-chip-active' : 'f-chip'}
+              aria-label="Fairy voice"
+              aria-pressed={chat.voiceOn}
+              title="Speak Fairy's replies aloud (OS speech engine) — replies stay on the record"
+              onClick={chat.toggleVoice}
+            >Voice</button>
+          )}
           <button
             type="button"
             className={historyOpen ? 'f-chip f-chip-active' : 'f-chip'}

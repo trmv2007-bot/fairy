@@ -7,6 +7,7 @@
 // exposes the archived-conversation list (search / open / delete).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessageWire, ConversationWire, ToolActivityEvent } from '../bridge.js';
+import { speak, cancelSpeech, speechAvailable, pickVoice } from './voice.js';
 
 export interface ToolChip {
   key: number;
@@ -38,6 +39,11 @@ export interface ChatController {
   searchConversations(query: string): Promise<void>;
   /** Permanently delete one transcript. */
   deleteConversation(id: string): Promise<void>;
+  /** Speak replies aloud (OS speech engine) — persisted per install. */
+  voiceOn: boolean;
+  /** Whether a speech engine exists at all (button visibility). */
+  voiceSupported: boolean;
+  toggleVoice(): void;
 }
 
 export function useChat(): ChatController {
@@ -47,8 +53,16 @@ export function useChat(): ChatController {
   const [tools, setTools] = useState<ToolChip[]>([]);
   const [conversations, setConversations] = useState<ConversationWire[]>([]);
   const [activeConversationId, setActiveConversationId] = useState('');
+  const [voiceOn, setVoiceOn] = useState<boolean>(() => {
+    try { return globalThis.localStorage?.getItem('fairy.voice') === '1'; } catch { return false; }
+  });
   const streamingRef = useRef(false);
   streamingRef.current = streaming;
+  const voiceRef = useRef(voiceOn);
+  voiceRef.current = voiceOn;
+  // Engine presence is measured once; CI/jsdom have none and the toggle hides.
+  const voiceSupported = useRef(speechAvailable()).current;
+  const voicePref = useRef<{ voice: ReturnType<typeof pickVoice> }>({ voice: null });
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -129,6 +143,13 @@ export function useChat(): ChatController {
         });
         if (res.conversationId) setActiveConversationId(res.conversationId);
         void refreshConversations();
+        if (voiceRef.current && res.message.content.length > 0) {
+          if (voicePref.current.voice === null) {
+            const synth = globalThis.speechSynthesis as unknown as { getVoices(): { name: string; lang: string }[] } | undefined;
+            voicePref.current.voice = synth ? pickVoice(synth.getVoices()) : null;
+          }
+          speak(res.message.content, { voice: voicePref.current.voice });
+        }
       } else if (!res.ok) {
         setError(res.error ?? 'send failed');
       }
@@ -148,6 +169,7 @@ export function useChat(): ChatController {
       setMessages([]);
       setTools([]);
       setActiveConversationId('');
+      cancelSpeech();
       void refreshConversations();
     } else setError(res.error ?? 'clear failed');
   }, [refreshConversations]);
@@ -160,6 +182,7 @@ export function useChat(): ChatController {
         setTools([]);
         setError(null);
         setActiveConversationId(res.id ?? '');
+        cancelSpeech();
         void refreshConversations();
       } else setError(res.error ?? 'open failed');
     } catch (err) {
@@ -198,9 +221,19 @@ export function useChat(): ChatController {
     }
   }, [activeConversationId, refreshConversations]);
 
+  const toggleVoice = useCallback(() => {
+    setVoiceOn(v => {
+      const next = !v;
+      try { globalThis.localStorage?.setItem('fairy.voice', next ? '1' : '0'); } catch { /* private mode */ }
+      if (!next) cancelSpeech();
+      return next;
+    });
+  }, []);
+
   return {
     messages, streaming, error, tools, send, clear,
     conversations, activeConversationId,
     refreshConversations, openConversation, searchConversations, deleteConversation,
+    voiceOn, voiceSupported, toggleVoice,
   };
 }
