@@ -2,6 +2,18 @@
 
 Proactive Windows desktop assistant (Electron + TS + React + SQLite + .NET 8 broker).
 
+## The v0.5 remodel ("holo-glass")
+
+The whole shell was rebuilt around the canon eye: holo-glass panels with
+gradient hairline borders and a slow border shimmer, a state-reactive iris
+(rotating mandala rings, pupil dilation, throb on alerts), a restyled CRT
+boot ritual with a glitching wordmark, mixed typography (mono for the
+machine's voice, sans for Fairy's words), staggered entrances, and a
+command-bar-first panel — one persistent input up top, tabs became chips,
+sections collapse into a pure command console. All interaction contracts
+(aria-labels, e2e selectors, flows) are unchanged; the e2e suite passes
+against the new shell. Screenshots: `screenshots-remodel/` tour.
+
 ## What works today
 
 - **Chat with real hands (v0.2)** — streaming conversations through the

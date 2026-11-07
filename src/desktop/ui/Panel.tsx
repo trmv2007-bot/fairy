@@ -6,6 +6,11 @@ export interface PanelProps {
   children?: React.ReactNode;
 }
 
+/**
+ * The side panel (v0.5 remodel): a holo-glass sheet sliding in from the right
+ * with a gradient hairline edge. Escape closes; role/aria contracts kept for
+ * tests + a11y ("Fairy side panel", "Close panel").
+ */
 export function Panel({ open, onClose, children }: PanelProps): React.ReactElement | null {
   // Escape closes the dialog — standard a11y affordance for side panels.
   useEffect(() => {
@@ -22,22 +27,22 @@ export function Panel({ open, onClose, children }: PanelProps): React.ReactEleme
     <aside
       role="dialog"
       aria-label="Fairy side panel"
+      className="f-holo f-hairline f-panel-enter"
       style={{
         position: 'fixed',
         top: 0,
         right: 0,
-        width: 380,
+        width: 400,
         height: '100vh',
         boxSizing: 'border-box',
-        background: 'rgba(7, 11, 22, 0.97)',
         color: 'var(--f-text)',
-        borderLeft: '1px solid var(--f-line)',
-        boxShadow: '-1px 0 0 rgba(79,140,255,0.35), -10px 0 36px rgba(0,0,0,0.6)',
+        borderLeft: '1px solid rgba(87, 209, 255, 0.35)',
+        boxShadow: '-1px 0 0 rgba(87,209,255,0.4), -16px 0 44px rgba(0,0,0,0.65)',
         padding: 16,
         overflow: 'auto',
       }}
     >
-      <button type="button" onClick={onClose} aria-label="Close panel" className="f-btn" style={{ float: 'right', padding: '2px 8px' }}>
+      <button type="button" onClick={onClose} aria-label="Close panel" className="f-btn" style={{ float: 'right', padding: '2px 8px', marginLeft: 8 }}>
         ×
       </button>
       {children}

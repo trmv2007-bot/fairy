@@ -61,8 +61,8 @@ export function SettingsPanel({ onSave, saving }: { onSave: (p: SaveProviderPayl
             <button
               key={p.id}
               type="button"
-              className="f-btn"
-              style={{ padding: '2px 10px', fontSize: 12 }}
+              className="f-chip"
+              style={{ padding: '3px 11px' }}
               title={`${p.baseUrl} · ${p.model}`}
               aria-label={`Use ${p.label} preset`}
               onClick={() => set({ endpointId: p.endpointId, baseUrl: p.baseUrl, model: p.model })}

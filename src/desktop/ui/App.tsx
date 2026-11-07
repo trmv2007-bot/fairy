@@ -3,11 +3,12 @@ import { Orb, STATE_LABELS } from './Orb.js';
 import { Panel } from './Panel.js';
 import { Chat } from './Chat.js';
 import { Boot } from './Boot.js';
+import { useChat } from './use-chat.js';
 import { SettingsPanel } from '../settings-ui.js';
 import type { PersistedConfigWire, PoolStatusWire, SaveProviderPayload, SystemSnapshot } from '../bridge.js';
 
 type OrbState = 'idle' | 'listening' | 'thinking' | 'working' | 'approval-needed' | 'paused' | 'error';
-type Tab = 'chat' | 'status' | 'providers';
+type Section = 'chat' | 'status' | 'providers';
 
 const rowStyle: React.CSSProperties = { marginBottom: 6 };
 
@@ -27,16 +28,16 @@ function AgreementOverlay({ onSign }: { onSign: () => void }): React.ReactElemen
       aria-label="Fairy user agreement"
       style={{
         position: 'fixed', inset: 0, zIndex: 9000,
-        background: 'rgba(4, 7, 10, 0.88)',
+        background: 'rgba(3, 5, 16, 0.88)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
       }}
     >
       <div
-        className="hud-corners"
+        className="hud-corners f-holo f-hairline"
         style={{
-          maxWidth: 360, boxSizing: 'border-box', padding: 18,
-          background: 'var(--f-bg1)', border: '1px solid var(--f-line)',
-          boxShadow: '0 0 24px rgba(79,140,255,0.12), 0 12px 40px rgba(0,0,0,0.6)',
+          maxWidth: 380, boxSizing: 'border-box', padding: 18,
+          border: '1px solid rgba(79, 140, 255, 0.3)',
+          boxShadow: '0 0 24px rgba(79,140,255,0.14), 0 12px 40px rgba(0,0,0,0.6)',
         }}
       >
         <div className="f-heading" style={{ marginTop: 0 }}>User agreement</div>
@@ -51,7 +52,7 @@ function AgreementOverlay({ onSign }: { onSign: () => void }): React.ReactElemen
           this. I will have no complaints.)
         </p>
         <p style={{
-          fontSize: 12, lineHeight: 1.5, color: 'var(--f-muted)',
+          fontSize: 12.5, lineHeight: 1.55, color: 'var(--f-muted)',
           borderLeft: '2px solid var(--f-acc-dim)', paddingLeft: 8, margin: '10px 0',
         }}>
           “According to the user agreement you signed, I am to assist you in your
@@ -130,7 +131,7 @@ function DeviceReadout(): React.ReactElement {
       <div className="f-heading" style={{ marginTop: 0 }}>Device readout</div>
       <div className="f-row" style={rowStyle}>
         <span className="f-label">Operating system</span>
-        <strong style={{ textAlign: 'right' }}>{snap.os} · {snap.arch}</strong>
+        <strong style={{ textAlign: 'right', wordBreak: 'break-all', fontSize: 12 }}>{snap.os} · {snap.arch}</strong>
       </div>
       <div className="f-row" style={rowStyle}>
         <span className="f-label">Hostname · user</span>
@@ -244,7 +245,8 @@ function PoolReadout(): React.ReactElement {
 
 export function App(): React.ReactElement {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>('chat');
+  const [section, setSection] = useState<Section>('chat');
+  const [collapsed, setCollapsed] = useState(false);
   const [state, setState] = useState<OrbState>('idle');
   const [config, setConfig] = useState<PersistedConfigWire | null>(null);
   const [booted, setBooted] = useState(false);
@@ -252,6 +254,8 @@ export function App(): React.ReactElement {
   const [brokerOnline, setBrokerOnline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cmd, setCmd] = useState('');
+  const chat = useChat();
 
   useEffect(() => {
     window.fairy.settings.load().then(res => {
@@ -335,6 +339,31 @@ export function App(): React.ReactElement {
     }
   }, [config]);
 
+  // Command bar: one input, always at the top. Sending re-opens the chat
+  // section so the exchange is visible no matter which section was up.
+  const submitCommand = useCallback(async () => {
+    const text = cmd.trim();
+    if (text.length === 0 || chat.streaming || !hasProvider) return;
+    setCmd('');
+    setSection('chat');
+    setCollapsed(false);
+    await chat.send(text);
+  }, [cmd, chat, hasProvider]);
+
+  const onCmdKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void submitCommand();
+    }
+  };
+
+  // Section chips: click the active chip again to collapse the section body —
+  // the command bar stays, the panel becomes a pure console.
+  const pickSection = useCallback((s: Section) => {
+    if (s === section) setCollapsed(c => !c);
+    else { setSection(s); setCollapsed(false); }
+  }, [section]);
+
   return (
     <div className="hud-corners" style={{ padding: 18, minHeight: '100vh', boxSizing: 'border-box' }}>
       {/* Canon power-on ritual: CRT scan readout -> the eye wakes -> Fairy
@@ -346,142 +375,222 @@ export function App(): React.ReactElement {
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <Orb state={state} onClick={() => setOpen(true)} />
         <div>
-          <div className="f-glow" style={{ fontFamily: 'var(--f-mono)', fontSize: 22, letterSpacing: '0.34em', lineHeight: 1.1 }}>
+          <div className="f-wordmark" style={{ fontSize: 22, letterSpacing: '0.34em', lineHeight: 1.1 }}>
             FAIRY
           </div>
-          <div className="f-label" style={{ marginTop: 4 }}>
+          <hr className="f-wordrule" style={{ width: 150, marginLeft: 0 }} />
+          <div className="f-label" style={{ marginTop: 6 }}>
             {STATE_LABELS[state]} · tap the screen to open
           </div>
         </div>
       </div>
       <Panel open={open} onClose={() => setOpen(false)}>
         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
-          <h2 className="f-glow" style={{ margin: 0, fontFamily: 'var(--f-mono)', fontSize: 20, letterSpacing: '0.3em' }}>
-            Fairy
-          </h2>
-          <p className="f-label" style={{ margin: '4px 0 10px' }}>Type-III general-purpose intelligence · Chief Assistant</p>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <button type="button" className={tab === 'chat' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('chat')}>Chat</button>
-            <button type="button" className={tab === 'status' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('status')}>Status</button>
-            <button type="button" className={tab === 'providers' ? 'f-btn f-btn-active' : 'f-btn'} onClick={() => setTab('providers')}>Providers</button>
-          </div>
-          {tab === 'chat' && (
-            <Chat
-              hasProvider={hasProvider}
-              onOpenProviders={() => setTab('providers')}
-              brokerOnline={brokerOnline}
-              poolSize={poolIds.length}
-            />
-          )}
-          {tab === 'status' && (
+          <div className="f-stagger">
             <div>
-              <DeviceReadout />
-              <PoolReadout />
-              <div className="f-heading">Operational status</div>
-              <div className="f-row" style={rowStyle}>
-                <span className="f-label">Assistant state</span>
-                <strong style={{ color: STATE_COLORS[state] }}>{STATE_LABELS[state]}</strong>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                <h2 className="f-wordmark" style={{ margin: 0, fontFamily: 'var(--f-mono)', fontSize: 20, letterSpacing: '0.3em' }}>
+                  Fairy
+                </h2>
+                <span className="f-label" style={{ whiteSpace: 'nowrap' }}>{STATE_LABELS[state]}</span>
               </div>
-              <div className="f-row" style={rowStyle}>
-                <span className="f-label">H.D.D. link (native broker)</span>
-                <strong style={{ color: brokerOnline ? 'var(--f-acc)' : 'var(--f-muted)' }}>
-                  {brokerOnline ? 'online' : 'offline'}
-                </strong>
+              <div className="f-label" style={{ marginTop: 3, letterSpacing: '0.12em' }}>
+                Type-III intelligence · Chief Assistant
               </div>
-              <div className="f-row" style={rowStyle}>
-                <span className="f-label">RopeNet alias</span>
-                <strong style={{ color: 'var(--f-muted)' }}>Wishing Sprite</strong>
-              </div>
-              <div className="f-row" style={rowStyle}>
-                <span className="f-label">Squad Bangboo</span>
-                <strong>Eous · standby</strong>
-              </div>
-              <div className="f-row" style={rowStyle}>
-                <span className="f-label">Power draw</span>
-                <strong style={{ color: 'var(--f-warn)' }}>24/7 · the bill is Master&apos;s</strong>
-              </div>
-              <div className="f-row" style={rowStyle}>
-                <span className="f-label">Providers configured</span>
-                <strong>{config?.cloudProviders.length ?? 0}</strong>
-              </div>
-              <div className="f-row" style={{ ...rowStyle, cursor: 'pointer' }}>
-                <label htmlFor="cmd-exec" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input
-                    id="cmd-exec"
-                    type="checkbox"
-                    checked={config?.allowCommandExecution === true}
-                    onChange={e => void onToggleCommandExecution(e.target.checked)}
-                  />
-                  <span>
-                    <strong>Controlled command execution</strong>
-                    <br />
-                    <span style={{ color: 'var(--f-muted)', fontSize: 11 }}>
-                      allowlisted diagnostics only — Fairy asks, Master arms
-                    </span>
-                  </span>
-                </label>
-                <strong style={{ color: config?.allowCommandExecution === true ? 'var(--f-warn)' : 'var(--f-muted)' }}>
-                  {config?.allowCommandExecution === true ? 'ARMED' : 'disarmed'}
-                </strong>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button type="button" className="f-btn" onClick={() => setState('paused')}>Suspend operations</button>
-                <button type="button" className="f-btn" onClick={() => setState('idle')}>Resume</button>
-              </div>
-              <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
-                Device readout is measured live in the main process — OS, CPU, memory,
-                power, displays. Tool results are &apos;internal&apos;-scope data: they flow
-                only to providers that allow that scope, and credential-like paths are
-                withheld from the model entirely.
-              </p>
             </div>
-          )}
-          {tab === 'providers' && (
-            <div>
-              <div className="f-heading" style={{ marginTop: 0 }}>Cloud providers</div>
-              <p className="f-label" style={{ margin: '0 0 8px' }}>
-                Key pool: {poolIds.length} of {config?.cloudProviders.length ?? 0} active · round-robin with failover
-              </p>
-              {(config?.cloudProviders ?? []).map(p => (
-                <div key={p.endpointId} className="f-row" style={rowStyle}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Pool member ${p.endpointId}`}
-                      checked={poolIds.includes(p.endpointId)}
-                      onChange={() => void onTogglePoolMember(p.endpointId)}
-                    />
-                    <span>
-                      <strong>{p.endpointId}</strong>
-                      <br />
-                      <span style={{ color: 'var(--f-muted)', fontSize: 12 }}>
-                        {p.baseUrl} · {p.model ?? 'default model'} · {p.keyPresent ? 'key vaulted' : 'no key this session'}
-                      </span>
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    className="f-btn"
-                    aria-label={`Remove provider ${p.endpointId}`}
-                    onClick={() => void onDeleteProvider(p.endpointId)}
-                    style={{ color: 'var(--f-danger)', borderColor: 'var(--f-line)', padding: '2px 8px' }}
-                  >✕</button>
-                </div>
-              ))}
-              {(config?.cloudProviders ?? []).length === 0 && (
-                <p style={{ color: 'var(--f-muted)' }}>No providers registered yet.</p>
+
+            {/* Command bar — the panel's one persistent input. */}
+            <form
+              className="f-cmdbar f-holo f-hairline f-shimmer"
+              style={{ marginTop: 10, borderRadius: 10 }}
+              onSubmit={(e) => { e.preventDefault(); void submitCommand(); }}
+            >
+              <textarea
+                aria-label="Command bar"
+                rows={1}
+                value={cmd}
+                placeholder={hasProvider ? 'Message Fairy… (Enter to send)' : 'Configure a provider first'}
+                onChange={e => setCmd(e.target.value)}
+                onKeyDown={onCmdKeyDown}
+                disabled={chat.streaming || !hasProvider}
+              />
+              <button
+                type="submit"
+                className="f-send"
+                aria-label="Send"
+                title="Send (Enter)"
+                disabled={chat.streaming || cmd.trim().length === 0 || !hasProvider}
+              >
+                {chat.streaming ? '…' : '▸'}
+              </button>
+            </form>
+
+            {/* Section chips + passive routing readouts. */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+              <button
+                type="button"
+                className={section === 'chat' && !collapsed ? 'f-chip f-chip-active' : 'f-chip'}
+                aria-pressed={section === 'chat' && !collapsed}
+                onClick={() => pickSection('chat')}
+              >Chat</button>
+              <button
+                type="button"
+                className={section === 'status' && !collapsed ? 'f-chip f-chip-active' : 'f-chip'}
+                aria-pressed={section === 'status' && !collapsed}
+                onClick={() => pickSection('status')}
+              >Status</button>
+              <button
+                type="button"
+                className={section === 'providers' && !collapsed ? 'f-chip f-chip-active' : 'f-chip'}
+                aria-pressed={section === 'providers' && !collapsed}
+                onClick={() => pickSection('providers')}
+              >Providers</button>
+              <span style={{ flex: 1 }} />
+              {poolIds.length > 0 && (
+                <span
+                  className="f-chip f-chip-info"
+                  title="Requests round-robin across every active key; failures fail over automatically"
+                  style={{ color: poolIds.length > 1 ? 'var(--f-acc)' : undefined }}
+                >
+                  key pool {poolIds.length}
+                </span>
               )}
-              <div className="f-heading">Add provider</div>
-              <SettingsPanel onSave={(p) => void onSaveProvider(p)} saving={saving} />
-              <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
-                Every key you save joins the active pool automatically: Fairy routes
-                requests round-robin across all ticked keys, fails over when one is
-                rate-limited or dead, and cools it down while the rest carry the load.
-                Register the same endpoint twice with different keys to pool one
-                provider. Keys are encrypted by the OS (DPAPI/keychain) and never
-                stored in plain text; the persisted config keeps opaque handles only.
-                Your keys stay yours — Fairy merely remembers them.
-              </p>
+              <span
+                className="f-chip f-chip-info"
+                title="Native broker — optional, chat works without it"
+              >
+                broker {brokerOnline ? 'online' : 'offline'}
+              </span>
+            </div>
+          </div>
+
+          {/* Collapsible section body — re-keyed per section so the staggered
+              entrance replays on every switch. Scrolls internally so tall
+              sections never paint over the notice line below. */}
+          {!collapsed && (
+            <div
+              key={section}
+              className="f-stagger"
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, marginTop: 10, overflowY: 'auto', overflowX: 'hidden', paddingRight: 2 }}
+            >
+              {section === 'chat' && (
+                <Chat
+                  chat={chat}
+                  hasProvider={hasProvider}
+                  onOpenProviders={() => { setSection('providers'); setCollapsed(false); }}
+                />
+              )}
+              {section === 'status' && (
+                <div>
+                  <DeviceReadout />
+                  <PoolReadout />
+                  <div className="f-heading">Operational status</div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">Assistant state</span>
+                    <strong style={{ color: STATE_COLORS[state] }}>{STATE_LABELS[state]}</strong>
+                  </div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">H.D.D. link (native broker)</span>
+                    <strong style={{ color: brokerOnline ? 'var(--f-acc)' : 'var(--f-muted)' }}>
+                      {brokerOnline ? 'online' : 'offline'}
+                    </strong>
+                  </div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">RopeNet alias</span>
+                    <strong style={{ color: 'var(--f-muted)' }}>Wishing Sprite</strong>
+                  </div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">Squad Bangboo</span>
+                    <strong>Eous · standby</strong>
+                  </div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">Power draw</span>
+                    <strong style={{ color: 'var(--f-warn)' }}>24/7 · the bill is Master&apos;s</strong>
+                  </div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">Providers configured</span>
+                    <strong>{config?.cloudProviders.length ?? 0}</strong>
+                  </div>
+                  <div className="f-row" style={{ ...rowStyle, cursor: 'pointer' }}>
+                    <label htmlFor="cmd-exec" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input
+                        id="cmd-exec"
+                        type="checkbox"
+                        checked={config?.allowCommandExecution === true}
+                        onChange={e => void onToggleCommandExecution(e.target.checked)}
+                      />
+                      <span>
+                        <strong>Controlled command execution</strong>
+                        <br />
+                        <span style={{ color: 'var(--f-muted)', fontSize: 11 }}>
+                          allowlisted diagnostics only — Fairy asks, Master arms
+                        </span>
+                      </span>
+                    </label>
+                    <strong style={{ color: config?.allowCommandExecution === true ? 'var(--f-warn)' : 'var(--f-muted)' }}>
+                      {config?.allowCommandExecution === true ? 'ARMED' : 'disarmed'}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button type="button" className="f-btn" onClick={() => setState('paused')}>Suspend operations</button>
+                    <button type="button" className="f-btn" onClick={() => setState('idle')}>Resume</button>
+                  </div>
+                  <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
+                    Device readout is measured live in the main process — OS, CPU, memory,
+                    power, displays. Tool results are &apos;internal&apos;-scope data: they flow
+                    only to providers that allow that scope, and credential-like paths are
+                    withheld from the model entirely.
+                  </p>
+                </div>
+              )}
+              {section === 'providers' && (
+                <div>
+                  <div className="f-heading" style={{ marginTop: 0 }}>Cloud providers</div>
+                  <p className="f-label" style={{ margin: '0 0 8px' }}>
+                    Key pool: {poolIds.length} of {config?.cloudProviders.length ?? 0} active · round-robin with failover
+                  </p>
+                  {(config?.cloudProviders ?? []).map(p => (
+                    <div key={p.endpointId} className="f-row" style={rowStyle}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Pool member ${p.endpointId}`}
+                          checked={poolIds.includes(p.endpointId)}
+                          onChange={() => void onTogglePoolMember(p.endpointId)}
+                        />
+                        <span>
+                          <strong>{p.endpointId}</strong>
+                          <br />
+                          <span style={{ color: 'var(--f-muted)', fontSize: 12 }}>
+                            {p.baseUrl} · {p.model ?? 'default model'} · {p.keyPresent ? 'key vaulted' : 'no key this session'}
+                          </span>
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className="f-btn"
+                        aria-label={`Remove provider ${p.endpointId}`}
+                        onClick={() => void onDeleteProvider(p.endpointId)}
+                        style={{ color: 'var(--f-danger)', borderColor: 'var(--f-line)', padding: '2px 8px' }}
+                      >✕</button>
+                    </div>
+                  ))}
+                  {(config?.cloudProviders ?? []).length === 0 && (
+                    <p style={{ color: 'var(--f-muted)' }}>No providers registered yet.</p>
+                  )}
+                  <div className="f-heading">Add provider</div>
+                  <SettingsPanel onSave={(p) => void onSaveProvider(p)} saving={saving} />
+                  <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
+                    Every key you save joins the active pool automatically: Fairy routes
+                    requests round-robin across all ticked keys, fails over when one is
+                    rate-limited or dead, and cools it down while the rest carry the load.
+                    Register the same endpoint twice with different keys to pool one
+                    provider. Keys are encrypted by the OS (DPAPI/keychain) and never
+                    stored in plain text; the persisted config keeps opaque handles only.
+                    Your keys stay yours — Fairy merely remembers them.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           {notice && <p style={{ color: 'var(--f-warn)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>{notice}</p>}

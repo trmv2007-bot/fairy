@@ -1,0 +1,347 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   FAIRY · v0.5 remodel — "holo-glass" design system (canon ZZZ palette)
+   ─────────────────────────────────────────────────────────────────────────
+   Identity: the blue concentric eye on a dark navy CRT. This sheet keeps the
+   canon hues (Fairy blue + cyan on near-black navy) and adds the remodel
+   layer: holo-glass panels with gradient hairline borders, a slow border
+   shimmer, staggered entrances, state-reactive iris motion, and mixed
+   typography (mono for the machine's voice, sans for Fairy's words).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --f-bg0: #030510;
+  --f-bg1: #070f1f;
+  --f-bg2: #0c1730;
+  --f-line: #1d3055;
+  --f-acc: #4f8cff;
+  --f-acc-dim: #8fb4e8;
+  --f-cyan: #57d1ff;
+  --f-text: #dfe9fa;
+  --f-muted: #7f90b0;
+  --f-danger: #ff4d6d;
+  --f-warn: #ffc44d;
+  --f-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'JetBrains Mono', Menlo, monospace;
+  --f-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', sans-serif;
+  --f-glass: rgba(10, 19, 38, 0.62);
+  --f-hairline: linear-gradient(100deg, rgba(87, 209, 255, 0.6), rgba(79, 140, 255, 0.12) 38%, rgba(87, 209, 255, 0.5));
+}
+
+html, body { margin: 0; min-height: 100%; }
+body {
+  font-family: var(--f-sans);
+  color: var(--f-text);
+  background:
+    radial-gradient(1100px 620px at 18% -10%, rgba(79, 140, 255, 0.09), transparent 60%),
+    radial-gradient(900px 520px at 110% 112%, rgba(87, 209, 255, 0.07), transparent 60%),
+    var(--f-bg0);
+}
+
+/* CRT scanlines + slow sweep, the Fairy terminal feel */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.20) 0 1px, transparent 1px 3px);
+  opacity: 0.5;
+}
+body::before {
+  content: '';
+  position: fixed; left: 0; right: 0; top: -120px; height: 110px;
+  z-index: 9998; pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(87, 209, 255, 0.05), transparent);
+  animation: f-sweep 9s linear infinite;
+}
+@keyframes f-sweep { to { transform: translateY(calc(100vh + 240px)); } }
+
+/* ── HUD corner brackets (desktop frame) ─────────────────────────────────── */
+.hud-corners {
+  background-image:
+    linear-gradient(var(--f-acc), var(--f-acc)), linear-gradient(var(--f-acc), var(--f-acc)),
+    linear-gradient(var(--f-cyan), var(--f-cyan)), linear-gradient(var(--f-cyan), var(--f-cyan)),
+    linear-gradient(var(--f-acc), var(--f-acc)), linear-gradient(var(--f-acc), var(--f-acc)),
+    linear-gradient(var(--f-cyan), var(--f-cyan)), linear-gradient(var(--f-cyan), var(--f-cyan));
+  background-repeat: no-repeat;
+  background-size: 18px 2px, 2px 18px, 18px 2px, 2px 18px, 18px 2px, 2px 18px, 18px 2px, 2px 18px;
+  background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+}
+
+/* ── Holo-glass surface + gradient hairline border ───────────────────────── */
+.f-holo {
+  position: relative;
+  background:
+    linear-gradient(160deg, rgba(87, 209, 255, 0.06), transparent 40%),
+    var(--f-glass);
+  border: 1px solid rgba(79, 140, 255, 0.30);
+  backdrop-filter: blur(10px) saturate(1.15);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 24px rgba(79, 140, 255, 0.05);
+}
+.f-hairline::before {
+  content: '';
+  position: absolute; inset: -1px; padding: 1px;
+  border-radius: inherit;
+  background: var(--f-hairline);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* Border shimmer: a narrow highlight sweeping around active holo surfaces. */
+.f-shimmer::after {
+  content: '';
+  position: absolute; inset: -1px; padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 30%, rgba(150, 224, 255, 0.9) 47%, rgba(150, 224, 255, 0.12) 55%, transparent 72%);
+  background-size: 240% 100%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: f-shimmer 3.4s linear infinite;
+  pointer-events: none;
+}
+@keyframes f-shimmer { 0% { background-position: 135% 0; } 100% { background-position: -135% 0; } }
+
+/* ── Entrances: staggered rise for panel sections ────────────────────────── */
+@keyframes f-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes f-panel-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+.f-panel-enter { animation: f-panel-in 0.32s cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+.f-stagger > * { animation: f-rise 0.34s cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+.f-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.f-stagger > *:nth-child(2) { animation-delay: 0.07s; }
+.f-stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.f-stagger > *:nth-child(4) { animation-delay: 0.17s; }
+.f-stagger > *:nth-child(5) { animation-delay: 0.22s; }
+.f-stagger > *:nth-child(6) { animation-delay: 0.27s; }
+.f-stagger > *:nth-child(7) { animation-delay: 0.32s; }
+.f-stagger > *:nth-child(8) { animation-delay: 0.37s; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.f-btn {
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  background: rgba(10, 19, 38, 0.55); color: var(--f-acc-dim);
+  border: 1px solid var(--f-line); padding: 5px 12px; cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.f-btn:hover { border-color: var(--f-acc); color: var(--f-acc); box-shadow: 0 0 10px rgba(79, 140, 255, 0.22); }
+.f-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+.f-btn-active {
+  background: linear-gradient(180deg, rgba(87, 209, 255, 0.14), rgba(87, 209, 255, 0.04));
+  border-color: rgba(87, 209, 255, 0.55); color: var(--f-cyan);
+  box-shadow: 0 0 10px rgba(87, 209, 255, 0.18), inset 0 0 8px rgba(87, 209, 255, 0.08);
+}
+.f-btn-primary { background: rgba(79, 140, 255, 0.14); border: 1px solid var(--f-acc); color: var(--f-acc); }
+.f-btn-primary:hover { background: rgba(79, 140, 255, 0.26); }
+
+/* Chip: the remodel's section switcher (mono label, holo active state) */
+.f-chip {
+  font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 4px 11px; cursor: pointer; position: relative;
+  color: var(--f-muted); background: rgba(10, 19, 38, 0.5);
+  border: 1px solid var(--f-line);
+  transition: color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.f-chip:hover { color: var(--f-acc); border-color: var(--f-acc); }
+.f-chip:disabled { opacity: 0.4; cursor: default; }
+.f-chip-active {
+  color: var(--f-cyan);
+  border-color: rgba(87, 209, 255, 0.55);
+  background: linear-gradient(180deg, rgba(87, 209, 255, 0.15), rgba(87, 209, 255, 0.04));
+  box-shadow: 0 0 12px rgba(87, 209, 255, 0.2), inset 0 0 10px rgba(87, 209, 255, 0.08);
+}
+/* passive chips (key pool / broker readouts) */
+.f-chip-info {
+  color: var(--f-muted); border-color: rgba(29, 48, 85, 0.9);
+  background: rgba(10, 19, 38, 0.4); cursor: default;
+}
+
+/* ── Inputs ───────────────────────────────────────────────────────────────── */
+.f-input {
+  width: 100%; box-sizing: border-box; color: var(--f-text);
+  background: rgba(12, 23, 48, 0.72);
+  border: 1px solid var(--f-line); padding: 7px 9px; font-size: 13px; outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.f-input:focus {
+  border-color: rgba(87, 209, 255, 0.65);
+  box-shadow: 0 0 0 1px rgba(87, 209, 255, 0.35), 0 0 14px rgba(87, 209, 255, 0.14);
+}
+.f-input::placeholder { color: #46556e; }
+textarea.f-input { resize: none; font-family: inherit; }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
+
+/* Command bar: the persistent holo input at the top of the panel */
+.f-cmdbar { display: flex; align-items: flex-end; gap: 8px; padding: 8px; transition: box-shadow 0.2s ease; }
+.f-cmdbar:focus-within {
+  box-shadow: 0 0 0 1px rgba(87, 209, 255, 0.4), 0 0 20px rgba(87, 209, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.f-cmdbar textarea {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--f-text); font-family: var(--f-sans); font-size: 13.5px; line-height: 1.45;
+  resize: none; padding: 2px 4px; min-height: 40px; box-sizing: border-box;
+}
+.f-cmdbar textarea::placeholder { color: #46556e; }
+.f-cmdbar textarea:disabled { opacity: 0.45; }
+.f-send {
+  flexShrink: 0;
+  width: 34px; height: 34px; padding: 0; cursor: pointer;
+  font-family: var(--f-mono); font-size: 15px; line-height: 1;
+  color: var(--f-cyan);
+  background: linear-gradient(180deg, rgba(87, 209, 255, 0.16), rgba(87, 209, 255, 0.05));
+  border: 1px solid rgba(87, 209, 255, 0.5);
+  transition: box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.f-send:hover { box-shadow: 0 0 12px rgba(87, 209, 255, 0.35); }
+.f-send:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
+
+/* ── Readout rows + labels ────────────────────────────────────────────────── */
+.f-label {
+  font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--f-muted);
+}
+.f-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 8px 12px; margin-bottom: 6px;
+  background: linear-gradient(90deg, rgba(87, 209, 255, 0.05), rgba(10, 19, 38, 0.5) 32%);
+  border: 1px solid rgba(29, 48, 85, 0.85);
+  border-left: 2px solid rgba(87, 209, 255, 0.5);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.f-row:hover { border-color: rgba(79, 140, 255, 0.6); box-shadow: 0 0 10px rgba(79, 140, 255, 0.12); }
+.f-glow { color: var(--f-acc); text-shadow: 0 0 8px rgba(79, 140, 255, 0.55); }
+.f-heading {
+  font-family: var(--f-mono); font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--f-acc); margin: 14px 0 6px;
+}
+
+/* Wordmark: gradient glyph (remodel signature) */
+.f-wordmark {
+  font-family: var(--f-mono);
+  background: linear-gradient(92deg, #e8f2ff 8%, var(--f-cyan) 55%, var(--f-acc) 96%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 10px rgba(87, 209, 255, 0.35));
+}
+.f-wordrule {
+  height: 2px; border: none; margin: 6px 0 0;
+  background: linear-gradient(90deg, var(--f-cyan), rgba(79, 140, 255, 0.15) 55%, transparent);
+}
+
+/* ── Chat bubbles ─────────────────────────────────────────────────────────── */
+.f-bubble { max-width: 85%; padding: 8px 11px; position: relative; }
+.f-bubble-tag {
+  font-family: var(--f-mono); font-size: 9px; letter-spacing: 0.2em;
+  text-transform: uppercase; opacity: 0.65; margin-bottom: 3px;
+}
+.f-bubble-body { font-family: var(--f-sans); font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.f-bubble-master {
+  align-self: flex-end;
+  background: linear-gradient(160deg, rgba(87, 209, 255, 0.13), rgba(87, 209, 255, 0.05));
+  border: 1px solid rgba(87, 209, 255, 0.4);
+  color: #e6f4ff;
+  border-radius: 10px 10px 2px 10px;
+}
+.f-bubble-fairy {
+  align-self: flex-start;
+  background:
+    linear-gradient(160deg, rgba(87, 209, 255, 0.06), transparent 42%),
+    var(--f-glass);
+  border: 1px solid rgba(79, 140, 255, 0.32);
+  border-left: 2px solid var(--f-acc);
+  color: var(--f-text);
+  border-radius: 10px 10px 10px 2px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(79, 140, 255, 0.05);
+  backdrop-filter: blur(8px);
+}
+.f-caret {
+  display: inline-block; width: 7px; height: 14px; margin-left: 3px; vertical-align: text-bottom;
+  background: var(--f-cyan); box-shadow: 0 0 8px rgba(87, 209, 255, 0.7);
+  animation: f-caret 0.9s steps(2, start) infinite;
+}
+@keyframes f-caret { 50% { opacity: 0.15; } }
+
+/* Tool activity log */
+.f-toollog {
+  align-self: flex-start; max-width: 85%; padding: 6px 10px;
+  background: rgba(79, 140, 255, 0.06);
+  border: 1px dashed rgba(29, 48, 85, 0.9);
+  border-left: 2px solid var(--f-cyan);
+  font-family: var(--f-mono); font-size: 11px; line-height: 1.8;
+}
+
+/* ── Fairy's eye emblem: state-reactive motion ────────────────────────────── */
+.f-pupil { animation: f-blink 4.2s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+.f-pupil-fast { animation-duration: 1.1s; }
+@keyframes f-blink {
+  0%, 92%, 100% { transform: scale(1, 1); }
+  95% { transform: scale(1.25, 0.12); }
+}
+.f-pulse { animation: f-pulse 1.6s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes f-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+.f-ring-spin { animation: f-rotate 18s linear infinite; transform-origin: center; transform-box: fill-box; }
+.f-ring-spin-fast { animation-duration: 3.4s; }
+.f-ring-spin-rev { animation: f-rotate-rev 26s linear infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes f-rotate { to { transform: rotate(360deg); } }
+@keyframes f-rotate-rev { to { transform: rotate(-360deg); } }
+
+/* Typing indicator dots */
+.f-dot { display: inline-block; animation: f-fade 1s infinite; margin-left: 2px; }
+@keyframes f-fade { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
+
+/* ── Boot sequence: CRT power-on ritual (restyled, same canon beat) ──────── */
+.f-boot-flicker {
+  background:
+    linear-gradient(180deg, rgba(79, 140, 255, 0.10), transparent 28%, transparent 72%, rgba(87, 209, 255, 0.05));
+  animation: f-flicker 0.5s steps(4, end) both, f-sweep 2.6s linear 1;
+}
+@keyframes f-flicker {
+  0% { opacity: 0; } 25% { opacity: 1; } 40% { opacity: 0.35; }
+  60% { opacity: 1; } 75% { opacity: 0.7; } 100% { opacity: 1; }
+}
+.f-boot-line { animation: f-line-in 0.16s ease-out both; }
+@keyframes f-line-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.f-boot-wake { animation: f-eye-open 0.55s cubic-bezier(0.2, 0.85, 0.3, 1) both; }
+@keyframes f-eye-open {
+  0% { opacity: 0; transform: scale(0.55); filter: blur(4px); }
+  65% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); filter: none; }
+}
+/* Wordmark glitch-in: rgb-split shadows snapping into place (deterministic) */
+.f-glitch-in {
+  animation: f-glitch 0.42s steps(3, end) both, f-line-in 0.3s ease-out both;
+}
+@keyframes f-glitch {
+  0% { text-shadow: -3px 0 rgba(255, 77, 109, 0.8), 3px 0 rgba(87, 209, 255, 0.8); transform: translateX(2px); }
+  40% { text-shadow: 2px 0 rgba(255, 77, 109, 0.6), -2px 0 rgba(87, 209, 255, 0.6); transform: translateX(-2px); }
+  70% { text-shadow: -1px 0 rgba(255, 77, 109, 0.4), 1px 0 rgba(87, 209, 255, 0.4); transform: none; }
+  100% { text-shadow: none; transform: none; }
+}
+.f-boot-progress {
+  height: 2px; width: 460px; max-width: 92vw;
+  background: rgba(29, 48, 85, 0.7); position: relative; overflow: hidden;
+}
+.f-boot-progress > span {
+  position: absolute; inset: 0; transform-origin: left;
+  background: linear-gradient(90deg, var(--f-acc), var(--f-cyan));
+  box-shadow: 0 0 8px rgba(87, 209, 255, 0.6);
+  transition: transform 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .f-boot-flicker, .f-boot-line, .f-boot-wake, .f-pupil, .f-glitch-in,
+  .f-ring-spin, .f-ring-spin-rev, .f-pulse, .f-shimmer::after,
+  .f-panel-enter, .f-stagger > *, .f-caret { animation: none !important; }
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1d3055; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #31456f; }
