@@ -23,16 +23,48 @@
   --f-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'JetBrains Mono', Menlo, monospace;
   --f-sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', sans-serif;
   --f-glass: rgba(10, 19, 38, 0.62);
-  --f-hairline: linear-gradient(100deg, rgba(87, 209, 255, 0.6), rgba(79, 140, 255, 0.12) 38%, rgba(87, 209, 255, 0.5));
+  --f-hairline: linear-gradient(100deg, rgba(var(--f-cyan-rgb), 0.6), rgba(var(--f-acc-rgb), 0.12) 38%, rgba(var(--f-cyan-rgb), 0.5));
+  /* derived rgb triplets — accent themes swap these, not every rule */
+  --f-acc-rgb: 79, 140, 255;
+  --f-cyan-rgb: 87, 209, 255;
+  --f-shine-rgb: 150, 224, 255;
+  /* CRT layer strength (light theme dials it down, not out) */
+  --f-scan-opacity: 0.5;
 }
+
+/* ── Light theme (v0.6): daylight ops room — surfaces only; iris color is
+   owned by the accent blocks below (they also ship light variants). ──── */
+:root[data-theme='light'] {
+  --f-bg0: #eef3fb;
+  --f-bg1: #e2eaf6;
+  --f-bg2: #d8e3f3;
+  --f-line: #b6c7e2;
+  --f-text: #14243f;
+  --f-muted: #55688c;
+  --f-danger: #d5294b;
+  --f-warn: #a06b00;
+  --f-glass: rgba(255, 255, 255, 0.72);
+  --f-scan-opacity: 0.16;
+}
+
+/* ── Accent themes (v0.6): same eye, different iris color ─────────────── */
+:root[data-accent='fairy'] { --f-acc: #4f8cff; --f-acc-rgb: 79, 140, 255; --f-acc-dim: #8fb4e8; --f-cyan: #57d1ff; --f-cyan-rgb: 87, 209, 255; --f-shine-rgb: 150, 224, 255; }
+:root[data-accent='cyan'] { --f-acc: #2ec5e6; --f-acc-rgb: 46, 197, 230; --f-acc-dim: #8fd8e8; --f-cyan: #6ef0ff; --f-cyan-rgb: 110, 240, 255; --f-shine-rgb: 190, 245, 255; }
+:root[data-accent='violet'] { --f-acc: #9a7bff; --f-acc-rgb: 154, 123, 255; --f-acc-dim: #b8a6ec; --f-cyan: #d08cff; --f-cyan-rgb: 208, 140, 255; --f-shine-rgb: 224, 190, 255; }
+:root[data-accent='magenta'] { --f-acc: #ff5f9e; --f-acc-rgb: 255, 95, 158; --f-acc-dim: #e89ab8; --f-cyan: #ff8cc6; --f-cyan-rgb: 255, 140, 198; --f-shine-rgb: 255, 200, 224; }
+
+/* Light variants: darker iris for contrast on glass-white surfaces. */
+:root[data-theme='light'][data-accent='cyan'] { --f-acc: #0b7fa6; --f-acc-rgb: 11, 127, 166; --f-acc-dim: #3d7a94; --f-cyan: #0a6f92; --f-cyan-rgb: 10, 111, 146; }
+:root[data-theme='light'][data-accent='violet'] { --f-acc: #6a4fd1; --f-acc-rgb: 106, 79, 209; --f-acc-dim: #7a68a8; --f-cyan: #8a3fc4; --f-cyan-rgb: 138, 63, 196; }
+:root[data-theme='light'][data-accent='magenta'] { --f-acc: #d42a6e; --f-acc-rgb: 212, 42, 110; --f-acc-dim: #a85a7e; --f-cyan: #b82567; --f-cyan-rgb: 184, 37, 103; }
 
 html, body { margin: 0; min-height: 100%; }
 body {
   font-family: var(--f-sans);
   color: var(--f-text);
   background:
-    radial-gradient(1100px 620px at 18% -10%, rgba(79, 140, 255, 0.09), transparent 60%),
-    radial-gradient(900px 520px at 110% 112%, rgba(87, 209, 255, 0.07), transparent 60%),
+    radial-gradient(1100px 620px at 18% -10%, rgba(var(--f-acc-rgb), 0.09), transparent 60%),
+    radial-gradient(900px 520px at 110% 112%, rgba(var(--f-cyan-rgb), 0.07), transparent 60%),
     var(--f-bg0);
 }
 
@@ -52,13 +84,13 @@ body::after {
   content: '';
   position: fixed; inset: 0; z-index: 9999; pointer-events: none;
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.20) 0 1px, transparent 1px 3px);
-  opacity: 0.5;
+  opacity: var(--f-scan-opacity);
 }
 body::before {
   content: '';
   position: fixed; left: 0; right: 0; top: -120px; height: 110px;
   z-index: 9998; pointer-events: none;
-  background: linear-gradient(180deg, transparent, rgba(87, 209, 255, 0.05), transparent);
+  background: linear-gradient(180deg, transparent, rgba(var(--f-cyan-rgb), 0.05), transparent);
   animation: f-sweep 9s linear infinite;
 }
 @keyframes f-sweep { to { transform: translateY(calc(100vh + 240px)); } }
@@ -79,11 +111,11 @@ body::before {
 .f-holo {
   position: relative;
   background:
-    linear-gradient(160deg, rgba(87, 209, 255, 0.06), transparent 40%),
+    linear-gradient(160deg, rgba(var(--f-cyan-rgb), 0.06), transparent 40%),
     var(--f-glass);
-  border: 1px solid rgba(79, 140, 255, 0.30);
+  border: 1px solid rgba(var(--f-acc-rgb), 0.30);
   backdrop-filter: blur(10px) saturate(1.15);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 24px rgba(79, 140, 255, 0.05);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 24px rgba(var(--f-acc-rgb), 0.05);
 }
 .f-hairline::before {
   content: '';
@@ -100,7 +132,7 @@ body::before {
   content: '';
   position: absolute; inset: -1px; padding: 1px;
   border-radius: inherit;
-  background: linear-gradient(115deg, transparent 30%, rgba(150, 224, 255, 0.9) 47%, rgba(150, 224, 255, 0.12) 55%, transparent 72%);
+  background: linear-gradient(115deg, transparent 30%, rgba(var(--f-shine-rgb), 0.9) 47%, rgba(var(--f-shine-rgb), 0.12) 55%, transparent 72%);
   background-size: 240% 100%;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -137,15 +169,15 @@ body::before {
   border: 1px solid var(--f-line); padding: 5px 12px; cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
-.f-btn:hover { border-color: var(--f-acc); color: var(--f-acc); box-shadow: 0 0 10px rgba(79, 140, 255, 0.22); }
+.f-btn:hover { border-color: var(--f-acc); color: var(--f-acc); box-shadow: 0 0 10px rgba(var(--f-acc-rgb), 0.22); }
 .f-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
 .f-btn-active {
-  background: linear-gradient(180deg, rgba(87, 209, 255, 0.14), rgba(87, 209, 255, 0.04));
-  border-color: rgba(87, 209, 255, 0.55); color: var(--f-cyan);
-  box-shadow: 0 0 10px rgba(87, 209, 255, 0.18), inset 0 0 8px rgba(87, 209, 255, 0.08);
+  background: linear-gradient(180deg, rgba(var(--f-cyan-rgb), 0.14), rgba(var(--f-cyan-rgb), 0.04));
+  border-color: rgba(var(--f-cyan-rgb), 0.55); color: var(--f-cyan);
+  box-shadow: 0 0 10px rgba(var(--f-cyan-rgb), 0.18), inset 0 0 8px rgba(var(--f-cyan-rgb), 0.08);
 }
-.f-btn-primary { background: rgba(79, 140, 255, 0.14); border: 1px solid var(--f-acc); color: var(--f-acc); }
-.f-btn-primary:hover { background: rgba(79, 140, 255, 0.26); }
+.f-btn-primary { background: rgba(var(--f-acc-rgb), 0.14); border: 1px solid var(--f-acc); color: var(--f-acc); }
+.f-btn-primary:hover { background: rgba(var(--f-acc-rgb), 0.26); }
 
 /* Chip: the remodel's section switcher (mono label, holo active state) */
 .f-chip {
@@ -159,9 +191,9 @@ body::before {
 .f-chip:disabled { opacity: 0.4; cursor: default; }
 .f-chip-active {
   color: var(--f-cyan);
-  border-color: rgba(87, 209, 255, 0.55);
-  background: linear-gradient(180deg, rgba(87, 209, 255, 0.15), rgba(87, 209, 255, 0.04));
-  box-shadow: 0 0 12px rgba(87, 209, 255, 0.2), inset 0 0 10px rgba(87, 209, 255, 0.08);
+  border-color: rgba(var(--f-cyan-rgb), 0.55);
+  background: linear-gradient(180deg, rgba(var(--f-cyan-rgb), 0.15), rgba(var(--f-cyan-rgb), 0.04));
+  box-shadow: 0 0 12px rgba(var(--f-cyan-rgb), 0.2), inset 0 0 10px rgba(var(--f-cyan-rgb), 0.08);
 }
 /* passive chips (key pool / broker readouts) */
 .f-chip-info {
@@ -177,8 +209,8 @@ body::before {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .f-input:focus {
-  border-color: rgba(87, 209, 255, 0.65);
-  box-shadow: 0 0 0 1px rgba(87, 209, 255, 0.35), 0 0 14px rgba(87, 209, 255, 0.14);
+  border-color: rgba(var(--f-cyan-rgb), 0.65);
+  box-shadow: 0 0 0 1px rgba(var(--f-cyan-rgb), 0.35), 0 0 14px rgba(var(--f-cyan-rgb), 0.14);
 }
 .f-input::placeholder { color: #46556e; }
 textarea.f-input { resize: none; font-family: inherit; }
@@ -187,7 +219,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 /* Command bar: the persistent holo input at the top of the panel */
 .f-cmdbar { display: flex; align-items: flex-end; gap: 8px; padding: 8px; transition: box-shadow 0.2s ease; }
 .f-cmdbar:focus-within {
-  box-shadow: 0 0 0 1px rgba(87, 209, 255, 0.4), 0 0 20px rgba(87, 209, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(var(--f-cyan-rgb), 0.4), 0 0 20px rgba(var(--f-cyan-rgb), 0.14), 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 .f-cmdbar textarea {
   flex: 1; background: transparent; border: none; outline: none;
@@ -201,11 +233,11 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
   width: 34px; height: 34px; padding: 0; cursor: pointer;
   font-family: var(--f-mono); font-size: 15px; line-height: 1;
   color: var(--f-cyan);
-  background: linear-gradient(180deg, rgba(87, 209, 255, 0.16), rgba(87, 209, 255, 0.05));
-  border: 1px solid rgba(87, 209, 255, 0.5);
+  background: linear-gradient(180deg, rgba(var(--f-cyan-rgb), 0.16), rgba(var(--f-cyan-rgb), 0.05));
+  border: 1px solid rgba(var(--f-cyan-rgb), 0.5);
   transition: box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
-.f-send:hover { box-shadow: 0 0 12px rgba(87, 209, 255, 0.35); }
+.f-send:hover { box-shadow: 0 0 12px rgba(var(--f-cyan-rgb), 0.35); }
 .f-send:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
 
 /* ── Readout rows + labels ────────────────────────────────────────────────── */
@@ -216,13 +248,13 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 .f-row {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding: 8px 12px; margin-bottom: 6px;
-  background: linear-gradient(90deg, rgba(87, 209, 255, 0.05), rgba(10, 19, 38, 0.5) 32%);
+  background: linear-gradient(90deg, rgba(var(--f-cyan-rgb), 0.05), rgba(10, 19, 38, 0.5) 32%);
   border: 1px solid rgba(29, 48, 85, 0.85);
-  border-left: 2px solid rgba(87, 209, 255, 0.5);
+  border-left: 2px solid rgba(var(--f-cyan-rgb), 0.5);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.f-row:hover { border-color: rgba(79, 140, 255, 0.6); box-shadow: 0 0 10px rgba(79, 140, 255, 0.12); }
-.f-glow { color: var(--f-acc); text-shadow: 0 0 8px rgba(79, 140, 255, 0.55); }
+.f-row:hover { border-color: rgba(var(--f-acc-rgb), 0.6); box-shadow: 0 0 10px rgba(var(--f-acc-rgb), 0.12); }
+.f-glow { color: var(--f-acc); text-shadow: 0 0 8px rgba(var(--f-acc-rgb), 0.55); }
 .f-heading {
   font-family: var(--f-mono); font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
   color: var(--f-acc); margin: 14px 0 6px;
@@ -235,11 +267,11 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 10px rgba(87, 209, 255, 0.35));
+  filter: drop-shadow(0 0 10px rgba(var(--f-cyan-rgb), 0.35));
 }
 .f-wordrule {
   height: 2px; border: none; margin: 6px 0 0;
-  background: linear-gradient(90deg, var(--f-cyan), rgba(79, 140, 255, 0.15) 55%, transparent);
+  background: linear-gradient(90deg, var(--f-cyan), rgba(var(--f-acc-rgb), 0.15) 55%, transparent);
 }
 
 /* ── Chat bubbles ─────────────────────────────────────────────────────────── */
@@ -251,26 +283,26 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 .f-bubble-body { font-family: var(--f-sans); font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 .f-bubble-master {
   align-self: flex-end;
-  background: linear-gradient(160deg, rgba(87, 209, 255, 0.13), rgba(87, 209, 255, 0.05));
-  border: 1px solid rgba(87, 209, 255, 0.4);
+  background: linear-gradient(160deg, rgba(var(--f-cyan-rgb), 0.13), rgba(var(--f-cyan-rgb), 0.05));
+  border: 1px solid rgba(var(--f-cyan-rgb), 0.4);
   color: #e6f4ff;
   border-radius: 10px 10px 2px 10px;
 }
 .f-bubble-fairy {
   align-self: flex-start;
   background:
-    linear-gradient(160deg, rgba(87, 209, 255, 0.06), transparent 42%),
+    linear-gradient(160deg, rgba(var(--f-cyan-rgb), 0.06), transparent 42%),
     var(--f-glass);
-  border: 1px solid rgba(79, 140, 255, 0.32);
+  border: 1px solid rgba(var(--f-acc-rgb), 0.32);
   border-left: 2px solid var(--f-acc);
   color: var(--f-text);
   border-radius: 10px 10px 10px 2px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(79, 140, 255, 0.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(var(--f-acc-rgb), 0.05);
   backdrop-filter: blur(8px);
 }
 .f-caret {
   display: inline-block; width: 7px; height: 14px; margin-left: 3px; vertical-align: text-bottom;
-  background: var(--f-cyan); box-shadow: 0 0 8px rgba(87, 209, 255, 0.7);
+  background: var(--f-cyan); box-shadow: 0 0 8px rgba(var(--f-cyan-rgb), 0.7);
   animation: f-caret 0.9s steps(2, start) infinite;
 }
 @keyframes f-caret { 50% { opacity: 0.15; } }
@@ -278,7 +310,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 /* Tool activity log */
 .f-toollog {
   align-self: flex-start; max-width: 85%; padding: 6px 10px;
-  background: rgba(79, 140, 255, 0.06);
+  background: rgba(var(--f-acc-rgb), 0.06);
   border: 1px dashed rgba(29, 48, 85, 0.9);
   border-left: 2px solid var(--f-cyan);
   font-family: var(--f-mono); font-size: 11px; line-height: 1.8;
@@ -309,7 +341,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 /* ── Boot sequence: CRT power-on ritual (restyled, same canon beat) ──────── */
 .f-boot-flicker {
   background:
-    linear-gradient(180deg, rgba(79, 140, 255, 0.10), transparent 28%, transparent 72%, rgba(87, 209, 255, 0.05));
+    linear-gradient(180deg, rgba(var(--f-acc-rgb), 0.10), transparent 28%, transparent 72%, rgba(var(--f-cyan-rgb), 0.05));
   animation: f-flicker 0.5s steps(4, end) both, f-sweep 2.6s linear 1;
 }
 @keyframes f-flicker {
@@ -329,9 +361,9 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
   animation: f-glitch 0.42s steps(3, end) both, f-line-in 0.3s ease-out both;
 }
 @keyframes f-glitch {
-  0% { text-shadow: -3px 0 rgba(255, 77, 109, 0.8), 3px 0 rgba(87, 209, 255, 0.8); transform: translateX(2px); }
-  40% { text-shadow: 2px 0 rgba(255, 77, 109, 0.6), -2px 0 rgba(87, 209, 255, 0.6); transform: translateX(-2px); }
-  70% { text-shadow: -1px 0 rgba(255, 77, 109, 0.4), 1px 0 rgba(87, 209, 255, 0.4); transform: none; }
+  0% { text-shadow: -3px 0 rgba(255, 77, 109, 0.8), 3px 0 rgba(var(--f-cyan-rgb), 0.8); transform: translateX(2px); }
+  40% { text-shadow: 2px 0 rgba(255, 77, 109, 0.6), -2px 0 rgba(var(--f-cyan-rgb), 0.6); transform: translateX(-2px); }
+  70% { text-shadow: -1px 0 rgba(255, 77, 109, 0.4), 1px 0 rgba(var(--f-cyan-rgb), 0.4); transform: none; }
   100% { text-shadow: none; transform: none; }
 }
 .f-boot-progress {
@@ -341,7 +373,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--f-cyan); }
 .f-boot-progress > span {
   position: absolute; inset: 0; transform-origin: left;
   background: linear-gradient(90deg, var(--f-acc), var(--f-cyan));
-  box-shadow: 0 0 8px rgba(87, 209, 255, 0.6);
+  box-shadow: 0 0 8px rgba(var(--f-cyan-rgb), 0.6);
   transition: transform 0.18s ease-out;
 }
 

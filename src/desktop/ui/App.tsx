@@ -5,6 +5,7 @@ import { Chat } from './Chat.js';
 import { Boot } from './Boot.js';
 import { useChat } from './use-chat.js';
 import { SettingsPanel } from '../settings-ui.js';
+import { THEMES, ACCENTS, readStoredTheme, readStoredAccent, storeTheme, storeAccent, type ThemeId, type AccentId } from './appearance.js';
 import type { PersistedConfigWire, PoolStatusWire, SaveProviderPayload, SystemSnapshot } from '../bridge.js';
 
 type OrbState = 'idle' | 'listening' | 'thinking' | 'working' | 'approval-needed' | 'paused' | 'error';
@@ -255,6 +256,8 @@ export function App(): React.ReactElement {
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [cmd, setCmd] = useState('');
+  const [theme, setTheme] = useState<ThemeId>(readStoredTheme);
+  const [accent, setAccent] = useState<AccentId>(readStoredAccent);
   const chat = useChat();
 
   useEffect(() => {
@@ -570,6 +573,37 @@ export function App(): React.ReactElement {
                   <p className="f-label" style={{ margin: '4px 0 0' }}>
                     Tray icon · always available · Ctrl/Cmd+Shift+F summons this panel
                   </p>
+                  <div className="f-heading" style={{ marginTop: 14 }}>Appearance</div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">Theme</span>
+                    <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {THEMES.map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className={theme === t.id ? 'f-chip f-chip-active' : 'f-chip'}
+                          aria-label={`Theme: ${t.label}`}
+                          aria-pressed={theme === t.id}
+                          onClick={() => { setTheme(t.id); storeTheme(t.id); }}
+                        >{t.label}</button>
+                      ))}
+                    </span>
+                  </div>
+                  <div className="f-row" style={rowStyle}>
+                    <span className="f-label">Accent</span>
+                    <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {ACCENTS.map(a => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          className={accent === a.id ? 'f-chip f-chip-active' : 'f-chip'}
+                          aria-label={`Accent: ${a.label}`}
+                          aria-pressed={accent === a.id}
+                          onClick={() => { setAccent(a.id); storeAccent(a.id); }}
+                        >{a.label}</button>
+                      ))}
+                    </span>
+                  </div>
                   <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
                     Device readout is measured live in the main process — OS, CPU, memory,
                     power, displays. Tool results are &apos;internal&apos;-scope data: they flow

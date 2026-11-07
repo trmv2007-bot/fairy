@@ -5,9 +5,13 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { OrbDock } from './OrbDock.js';
+import { applyStoredAppearance } from './appearance.js';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('missing #root mount element');
+
+// The user's look lands before any component paints (both windows).
+applyStoredAppearance();
 
 const view = new URLSearchParams(window.location.search).get('view');
 if (view === 'orb') {
