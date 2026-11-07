@@ -201,3 +201,22 @@ describe('keyless local routes (v0.6, Ollama)', () => {
     expect(isPrivateHttpHost('not a url')).toBe(false);
   });
 });
+
+describe('floatingOrb shell setting (v0.6)', () => {
+  it('defaults off and only activates on an explicit true', () => {
+    const off = loadConfig({ cloudProviders: [] });
+    expect(off.floatingOrb).toBeUndefined();
+    const on = loadConfig({ cloudProviders: [], floatingOrb: true });
+    expect(on.floatingOrb).toBe(true);
+    const junk = loadConfig({ cloudProviders: [], floatingOrb: 'yes' });
+    expect(junk.floatingOrb).toBeUndefined();
+  });
+
+  it('round-trips through persistence', () => {
+    const store = new SettingsStore(join(tmpdir(), `fairy-orb-${randomUUID()}.json`));
+    store.save(loadConfig({ cloudProviders: [], floatingOrb: true }));
+    expect(store.load().floatingOrb).toBe(true);
+    store.save(loadConfig({ cloudProviders: [] }));
+    expect(store.load().floatingOrb).toBeUndefined();
+  });
+});

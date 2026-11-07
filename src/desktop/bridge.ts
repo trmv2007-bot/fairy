@@ -30,6 +30,8 @@ export interface PersistedConfigWire {
   agreementAcceptedAt?: string;
   /** Master's opt-in for the command_run tool; absent = off. */
   allowCommandExecution?: boolean;
+  /** Floating orb widget enabled; absent = off. */
+  floatingOrb?: boolean;
 }
 
 export interface SaveProviderPayload {
@@ -148,6 +150,8 @@ export interface FairyBridge {
     acceptAgreement(): Promise<SettingsResult>;
     /** Arms or disarms the command_run tool (journaled both ways). */
     setCommandExecution(enabled: boolean): Promise<SettingsResult>;
+    /** Shows or dismisses the floating orb widget (journaled). */
+    setFloatingOrb(enabled: boolean): Promise<SettingsResult>;
   };
   chat: {
     /** Send one user turn; resolves with the final assistant message. Deltas arrive via onChunk. */
@@ -174,5 +178,9 @@ export interface FairyBridge {
   system: {
     /** Real device readout for the Status HUD — measured in the main process. */
     snapshot(): Promise<SystemSnapshotResult>;
+  };
+  shell: {
+    /** Summon/dismiss the main panel (floating orb + tray + hotkey entry point). */
+    togglePanel(): Promise<SimpleResult>;
   };
 }

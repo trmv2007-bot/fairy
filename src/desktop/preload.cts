@@ -31,6 +31,7 @@ const bridge: FairyBridge = {
     poolStatus: () => ipcRenderer.invoke('settings:poolStatus'),
     acceptAgreement: () => ipcRenderer.invoke('settings:acceptAgreement'),
     setCommandExecution: (enabled: boolean) => ipcRenderer.invoke('settings:setCommandExecution', enabled),
+    setFloatingOrb: (enabled: boolean) => ipcRenderer.invoke('settings:setFloatingOrb', enabled),
   },
   chat: {
     send: (text: string) => ipcRenderer.invoke('chat:send', text),
@@ -46,6 +47,9 @@ const bridge: FairyBridge = {
   },
   system: {
     snapshot: () => ipcRenderer.invoke('system:snapshot'),
+  },
+  shell: {
+    togglePanel: () => ipcRenderer.invoke('shell:togglePanel'),
   },
 };
 

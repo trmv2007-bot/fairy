@@ -3,7 +3,7 @@
 // exposes exactly the typed surface in bridge.ts — nothing else.
 // v0.2: Fairy's hands — the tool registry, real-device Status HUD snapshot, and
 // the chat tool-execution loop are wired here.
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell, powerMonitor } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, safeStorage, screen, shell, powerMonitor, Tray } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +29,9 @@ import type { BrokerStateEvent, ChatChunkEvent, PersistedConfigWire, PoolStatusW
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
+let orbWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let quitting = false;
 
 export function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
@@ -68,6 +71,15 @@ export function createWindow(): BrowserWindow {
     void mainWindow.loadFile(path.join(__dirname, '../ui/index.html'));
   }
   mainWindow.on('closed', () => { mainWindow = null; });
+  // Tray present → closing parks Fairy in the tray instead of exiting (an
+  // always-on assistant). No tray (Linux CI, missing indicator host) → the
+  // close button quits exactly as before.
+  mainWindow.on('close', (event) => {
+    if (!quitting && tray !== null && mainWindow !== null) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
   return mainWindow;
 }
 
@@ -84,11 +96,117 @@ app.on('web-contents-created', (_event, contents) => {
   contents.on('will-attach-webview', (event) => { event.preventDefault(); });
 });
 
+// ── Floating orb widget (v0.6) ────────────────────────────────────────────
+// A borderless, transparent, always-on-top eye. Opt-in (config.floatingOrb);
+// clicking it summons the panel. Shares the hardened preload/session.
+function createOrbWindow(): void {
+  if (orbWindow !== null) return;
+  orbWindow = new BrowserWindow({
+    width: 132,
+    height: 120,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false,
+    title: 'Fairy',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
+    },
+  });
+  orbWindow.setAlwaysOnTop(true, 'screen-saver');
+  orbWindow.once('ready-to-show', () => orbWindow?.show());
+  orbWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  orbWindow.webContents.on('will-navigate', (event) => { event.preventDefault(); });
+  const devUrl = process.env.FAIRY_DEV_URL;
+  if (devUrl) {
+    void orbWindow.loadURL(devUrl + (devUrl.includes('?') ? '&' : '?') + 'view=orb');
+  } else {
+    void orbWindow.loadFile(path.join(__dirname, '../ui/index.html'), { search: 'view=orb' });
+  }
+  orbWindow.on('closed', () => { orbWindow = null; });
+}
+
+function destroyOrbWindow(): void {
+  // destroy(), not close(): transparent click-through widgets must never
+  // re-enter close handlers, and the setting is already off.
+  if (orbWindow !== null) {
+    orbWindow.destroy();
+    orbWindow = null;
+  }
+}
+
+function applyFloatingOrb(enabled: boolean): void {
+  if (enabled) createOrbWindow();
+  else destroyOrbWindow();
+}
+
+/** Summon/dismiss the main panel — the one entry point for orb, tray, hotkey. */
+function togglePanel(): void {
+  if (mainWindow === null) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isVisible() && mainWindow.isFocused()) {
+    mainWindow.hide();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+// 16×16 eye-mandala (Fairy blue on navy) — embedded as a data URL so the tray
+// icon needs no packaging resources and cannot go missing in an installer.
+const TRAY_ICON_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAArElEQVR4nGNkwAJY2Pn+YxP/8/MTI7oYhgBMs3frRxTxrdX8WA1hxKURpgEG0MUxXMPCzvffv+f/fxZ2PrwYpoYszdgMYcIVYDBno4cFRnjhsv3Vp/930G3E5gomXDZLifIrB5/6yBB86iPD1mp+nC7BagApgAWbIMzGtWb8cBehRyvCBAL+xOd/Fna+/yx/fn5ixBUTOG2FApTERG5CojgpUy8zYTMEr5+hAABCQq4aUlobeAAAAABJRU5ErkJggg==';
+
+function createTray(): void {
+  try {
+    const icon = nativeImage.createFromDataURL(TRAY_ICON_DATA_URL);
+    tray = new Tray(icon);
+    tray.setToolTip('Fairy — Type-III intelligence');
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Open Fairy', click: () => togglePanel() },
+      { type: 'separator' },
+      {
+        label: 'Floating orb',
+        type: 'checkbox',
+        checked: settingsStore.load().floatingOrb === true,
+        click: (item) => {
+          try {
+            const cfg = settingsStore.load();
+            if (item.checked) cfg.floatingOrb = true;
+            else delete cfg.floatingOrb;
+            settingsStore.save(cfg);
+            applyFloatingOrb(item.checked);
+          } catch { /* tray mirrors the setting; the Settings tab is authoritative */ }
+        },
+      },
+      { type: 'separator' },
+      { label: 'Quit', click: () => { quitting = true; app.quit(); } },
+    ]));
+    tray.on('click', () => togglePanel());
+  } catch (err) {
+    // No tray host (headless Linux CI, stripped desktops): everything else works.
+    tray = null;
+    console.error('[fairy] tray unavailable:', err instanceof Error ? err.message : String(err));
+  }
+}
+
 export function getMainWindow(): BrowserWindow | null { return mainWindow; }
 
 function broadcast(channel: string, payload: unknown): void {
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
-  win?.webContents.send(channel, payload);
+  // Every window hears state: the floating orb mirrors runtime state live.
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(channel, payload);
+  }
 }
 
 // Chunk coalescing: several `chat:chunk` broadcasts can fire within one tick
@@ -319,6 +437,7 @@ function toWire(cfg: ReturnType<typeof loadConfig>): PersistedConfigWire {
     ...(pool.length > 0 ? { activeProviderIds: pool } : {}),
     ...(cfg.agreementAcceptedAt !== undefined ? { agreementAcceptedAt: cfg.agreementAcceptedAt } : {}),
     ...(cfg.allowCommandExecution === true ? { allowCommandExecution: true } : {}),
+    ...(cfg.floatingOrb === true ? { floatingOrb: true } : {}),
     allowLocalModels: cfg.allowLocalModels,
   };
 }
@@ -372,6 +491,30 @@ ipcMain.handle('settings:setCommandExecution', (_event, raw: unknown): SettingsR
   } catch (err) {
     return { ok: false, error: `command-execution toggle failed: ${err instanceof Error ? err.message : String(err)}` };
   }
+});
+
+// Floating orb widget (v0.6): journaled like every other shell-level arm switch.
+ipcMain.handle('settings:setFloatingOrb', (_event, raw: unknown): SettingsResult => {
+  if (raw !== true && raw !== false) {
+    return { ok: false, error: 'invalid payload (expected boolean)' };
+  }
+  try {
+    const cfg = settingsStore.load();
+    if (raw) cfg.floatingOrb = true;
+    else delete cfg.floatingOrb;
+    settingsStore.save(cfg);
+    applyFloatingOrb(raw);
+    journal?.append({ type: 'settings.floating-orb', payload: { enabled: raw }, acknowledged: true });
+    return { ok: true, config: toWire(settingsStore.load()) };
+  } catch (err) {
+    return { ok: false, error: `floating-orb toggle failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+});
+
+// Summon/dismiss the panel — orb click, tray, and the global hotkey all land here.
+ipcMain.handle('shell:togglePanel', (): { ok: boolean } => {
+  togglePanel();
+  return { ok: true };
 });
 
 // Real device readout for the Status HUD — every value measured, none invented.
@@ -732,6 +875,11 @@ if (!gotLock) {
     void probeBroker();
     // Keep the H.D.D. link indicator honest without a background storm.
     setInterval(() => { void probeBroker(); }, 30_000).unref();
+    // ── Shell presence (v0.6): tray, hotkey, floating orb ────────────────
+    createTray();
+    const hotkeyOk = globalShortcut.register('CommandOrControl+Shift+F', () => togglePanel());
+    if (!hotkeyOk) console.log('[fairy] global hotkey Ctrl/Cmd+Shift+F unavailable (claimed by another app)');
+    if (settingsStore.load().floatingOrb === true) createOrbWindow();
   }).catch((err: unknown) => {
     console.error('[fairy] startup failed:', err);
     dialog.showErrorBox('Fairy failed to start', err instanceof Error ? err.message : String(err));
@@ -739,4 +887,6 @@ if (!gotLock) {
   });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  app.on('before-quit', () => { quitting = true; });
+  app.on('will-quit', () => { globalShortcut.unregisterAll(); });
 }

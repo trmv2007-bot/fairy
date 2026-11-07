@@ -299,6 +299,17 @@ export function App(): React.ReactElement {
     }
   }, []);
 
+  // Floating orb (v0.6): the main process creates/destroys the widget window.
+  const onToggleFloatingOrb = useCallback(async (enabled: boolean) => {
+    try {
+      const res = await window.fairy.settings.setFloatingOrb(enabled);
+      if (res.config) setConfig(res.config);
+      setNotice(res.ok ? (enabled ? 'floating orb deployed — drag it anywhere' : 'floating orb dismissed') : (res.error ?? 'toggle failed'));
+    } catch (err) {
+      setNotice(`toggle failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, []);
+
   const onSaveProvider = useCallback(async (payload: SaveProviderPayload) => {
     setSaving(true);
     setNotice(null);
@@ -535,6 +546,30 @@ export function App(): React.ReactElement {
                     <button type="button" className="f-btn" onClick={() => setState('paused')}>Suspend operations</button>
                     <button type="button" className="f-btn" onClick={() => setState('idle')}>Resume</button>
                   </div>
+                  <div className="f-heading" style={{ marginTop: 14 }}>Shell presence</div>
+                  <div className="f-row" style={{ ...rowStyle, cursor: 'pointer' }}>
+                    <label htmlFor="floating-orb" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input
+                        id="floating-orb"
+                        type="checkbox"
+                        checked={config?.floatingOrb === true}
+                        onChange={e => void onToggleFloatingOrb(e.target.checked)}
+                      />
+                      <span>
+                        <strong>Floating orb</strong>
+                        <br />
+                        <span style={{ color: 'var(--f-muted)', fontSize: 11 }}>
+                          borderless always-on-top eye — click it to summon the panel, drag to park it
+                        </span>
+                      </span>
+                    </label>
+                    <strong style={{ color: config?.floatingOrb === true ? 'var(--f-acc)' : 'var(--f-muted)' }}>
+                      {config?.floatingOrb === true ? 'on' : 'off'}
+                    </strong>
+                  </div>
+                  <p className="f-label" style={{ margin: '4px 0 0' }}>
+                    Tray icon · always available · Ctrl/Cmd+Shift+F summons this panel
+                  </p>
                   <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
                     Device readout is measured live in the main process — OS, CPU, memory,
                     power, displays. Tool results are &apos;internal&apos;-scope data: they flow

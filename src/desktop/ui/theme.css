@@ -36,6 +36,17 @@ body {
     var(--f-bg0);
 }
 
+/* ── Floating orb view (?view=orb): transparent window, eye only ─────────── */
+html.f-orb-view,
+html.f-orb-view body {
+  background: transparent;
+  overflow: hidden;
+}
+html.f-orb-view body::after,
+html.f-orb-view body::before { display: none; }
+html.f-orb-view .hud-corners { background-image: none; }
+.f-orb-dock { -webkit-user-select: none; user-select: none; }
+
 /* CRT scanlines + slow sweep, the Fairy terminal feel */
 body::after {
   content: '';
