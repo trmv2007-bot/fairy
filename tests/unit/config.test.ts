@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { loadConfig, sanitizeProvider, sanitizeConfigForPersist } from '../../src/providers/config.js';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { loadConfig, sanitizeProvider, sanitizeConfigForPersist, effectivePool } from '../../src/providers/config.js';
+import { SettingsStore } from '../../src/storage/settings.js';
 
 describe('loadConfig sanitization', () => {
   it('returns defaults for non-object input', () => {
@@ -121,5 +125,47 @@ describe('sanitizeConfigForPersist', () => {
     expect(sanitizeConfigForPersist(42)).toBe(42);
     expect(sanitizeConfigForPersist(null)).toBeNull();
     expect(sanitizeConfigForPersist(['a', 'b'])).toEqual(['a', 'b']);
+  });
+});
+
+describe('activeProviderIds (key pool, v0.4)', () => {
+  const providers = [
+    { endpointId: 'a', baseUrl: 'https://a.com/v1', allowedDataScopes: ['public'], includedCost: true },
+    { endpointId: 'b', baseUrl: 'https://b.com/v1', allowedDataScopes: ['public'], includedCost: true },
+  ];
+
+  it('keeps an ordered, deduplicated pool of existing providers', () => {
+    const cfg = loadConfig({ cloudProviders: providers, activeProviderIds: ['b', 'a', 'b', 'a'] });
+    expect(cfg.activeProviderIds).toEqual(['b', 'a']);
+  });
+
+  it('drops ghost ids and non-string entries — a deleted key silently leaves the pool', () => {
+    const cfg = loadConfig({ cloudProviders: providers, activeProviderIds: ['a', 'ghost', 42, null, 'b'] });
+    expect(cfg.activeProviderIds).toEqual(['a', 'b']);
+  });
+
+  it('treats an all-ghost pool as absent (legacy routing, not a dead end)', () => {
+    const cfg = loadConfig({ cloudProviders: providers, activeProviderIds: ['ghost'] });
+    expect(cfg.activeProviderIds).toBeUndefined();
+  });
+
+  it('ignores a non-array pool field entirely', () => {
+    expect(loadConfig({ cloudProviders: providers, activeProviderIds: 'a' }).activeProviderIds).toBeUndefined();
+  });
+
+  it('effectivePool: explicit pool wins, else legacy selection, else empty', () => {
+    const explicit = loadConfig({ cloudProviders: providers, activeProviderIds: ['b', 'a'], selectedProviderId: 'a' });
+    expect(effectivePool(explicit)).toEqual(['b', 'a']);
+    const legacy = loadConfig({ cloudProviders: providers, selectedProviderId: 'b' });
+    expect(effectivePool(legacy)).toEqual(['b']);
+    const bare = loadConfig({ cloudProviders: providers });
+    expect(effectivePool(bare)).toEqual([]);
+  });
+
+  it('survives a settings save/load round-trip (no secret-stripping collision)', () => {
+    const store = new SettingsStore(join(tmpdir(), `fairy-pool-${randomUUID()}.json`));
+    const cfg = loadConfig({ cloudProviders: providers, activeProviderIds: ['a', 'b'] });
+    store.save(cfg);
+    expect(store.load().activeProviderIds).toEqual(['a', 'b']);
   });
 });

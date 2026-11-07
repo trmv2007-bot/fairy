@@ -56,10 +56,20 @@ export interface CloudCompletion {
   toolCalls?: CloudToolCall[];
 }
 
+/** Structured failure class — lets the key pool (v0.4) classify and react. */
+export type CloudErrorKind = 'http' | 'network' | 'timeout' | 'bad-response' | 'config';
+
 export class CloudRouteError extends Error {
-  constructor(message: string) {
+  /** HTTP status when the provider answered with an error response. */
+  readonly status?: number;
+  /** Failure family — 'config' errors are local (key/scope), the rest are remote. */
+  readonly kind: CloudErrorKind;
+
+  constructor(message: string, opts?: { status?: number; kind?: CloudErrorKind }) {
     super(message);
     this.name = 'CloudRouteError';
+    this.kind = opts?.kind ?? 'config';
+    if (opts?.status !== undefined) this.status = opts.status;
   }
 }
 
@@ -201,14 +211,14 @@ export class CloudProvider {
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new CloudRouteError(`provider HTTP ${res.status} for '${this.cfg.endpointId}': ${body.slice(0, 300)}`);
+      throw new CloudRouteError(`provider HTTP ${res.status} for '${this.cfg.endpointId}': ${body.slice(0, 300)}`, { status: res.status, kind: 'http' });
     }
 
     let data: ChatCompletionResponse;
     try {
       data = (await res.json()) as ChatCompletionResponse;
     } catch {
-      throw new CloudRouteError(`provider returned non-JSON response for '${this.cfg.endpointId}'`);
+      throw new CloudRouteError(`provider returned non-JSON response for '${this.cfg.endpointId}'`, { kind: 'bad-response' });
     }
     const content = data.choices?.[0]?.message?.content;
     const toolCalls = parseToolCalls(data.choices?.[0]?.message?.tool_calls);
@@ -240,7 +250,7 @@ export class CloudProvider {
     const res = await this.post(messages, { ...opts, stream: true }, STREAM_IDLE_TIMEOUT_MS);
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new CloudRouteError(`provider HTTP ${res.status} for '${this.cfg.endpointId}': ${body.slice(0, 300)}`);
+      throw new CloudRouteError(`provider HTTP ${res.status} for '${this.cfg.endpointId}': ${body.slice(0, 300)}`, { status: res.status, kind: 'http' });
     }
 
     const contentType = res.headers.get('content-type') ?? '';
@@ -250,7 +260,7 @@ export class CloudProvider {
       try {
         data = (await res.json()) as ChatCompletionResponse;
       } catch {
-        throw new CloudRouteError(`provider returned non-JSON response for '${this.cfg.endpointId}'`);
+        throw new CloudRouteError(`provider returned non-JSON response for '${this.cfg.endpointId}'`, { kind: 'bad-response' });
       }
       const content = data.choices?.[0]?.message?.content;
       const toolCalls = parseToolCalls(data.choices?.[0]?.message?.tool_calls);
@@ -310,7 +320,7 @@ export class CloudProvider {
           if (typeof delta === 'string' && delta.length > 0) {
             content += delta;
             if (content.length > MAX_STREAM_DELTA_LENGTH) {
-              throw new CloudRouteError(`provider stream exceeded ${MAX_STREAM_DELTA_LENGTH} chars for '${this.cfg.endpointId}'`);
+              throw new CloudRouteError(`provider stream exceeded ${MAX_STREAM_DELTA_LENGTH} chars for '${this.cfg.endpointId}'`, { kind: 'bad-response' });
             }
             onChunk(delta);
           }
@@ -322,11 +332,11 @@ export class CloudProvider {
     }
 
     if (timedOut) {
-      throw new CloudRouteError(`provider stream timed out (idle > ${STREAM_IDLE_TIMEOUT_MS}ms) for '${this.cfg.endpointId}'`);
+      throw new CloudRouteError(`provider stream timed out (idle > ${STREAM_IDLE_TIMEOUT_MS}ms) for '${this.cfg.endpointId}'`, { kind: 'timeout' });
     }
     const toolCalls = toolAcc.finish();
     if (content.length === 0 && toolCalls.length === 0) {
-      throw new CloudRouteError(`provider stream produced no content for '${this.cfg.endpointId}'`);
+      throw new CloudRouteError(`provider stream produced no content for '${this.cfg.endpointId}'`, { kind: 'bad-response' });
     }
     return finishCompletion(content, model ?? this.defaultModel(), usage, toolCalls);
   }
@@ -364,8 +374,12 @@ export class CloudProvider {
         signal: controller.signal,
       });
     } catch (err) {
-      const reason = err instanceof Error && err.name === 'AbortError' ? 'timed out' : 'network error';
-      throw new CloudRouteError(`provider request ${reason}: ${this.cfg.endpointId}`);
+      const timedOut = err instanceof Error && err.name === 'AbortError';
+      const reason = timedOut ? 'timed out' : 'network error';
+      throw new CloudRouteError(
+        `provider request ${reason}: ${this.cfg.endpointId}`,
+        timedOut ? { kind: 'timeout' } : { kind: 'network' },
+      );
     } finally {
       clearTimeout(timer);
     }

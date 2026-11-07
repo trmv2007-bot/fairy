@@ -14,14 +14,14 @@ import * as os from 'node:os';
 import { SettingsStore } from '../storage/settings.js';
 import { openDatabase } from '../storage/database.js';
 import { EventJournalImpl } from '../storage/journal.js';
-import { loadConfig, sanitizeProvider } from '../providers/config.js';
+import { loadConfig, sanitizeProvider, effectivePool } from '../providers/config.js';
 import { SecretVault } from '../providers/secret-vault.js';
 import { PersistedKeyStore, type KeyCodec } from '../providers/persisted-key-store.js';
-import { ModelGateway } from '../providers/gateway.js';
+import { ModelGateway, type PoolAttemptEvent } from '../providers/gateway.js';
 import { ChatService, type ToolActivityEvent } from './chat.js';
 import { BrokerClient, BrokerClientError } from '../native/broker-client.js';
 import { ToolRegistry, buildSystemSnapshot, type SystemDeps, type SystemSnapshot } from '../system/tools.js';
-import type { BrokerStateEvent, ChatChunkEvent, PersistedConfigWire, ProviderWire, RuntimeStateEvent, SettingsResult } from './bridge.js';
+import type { BrokerStateEvent, ChatChunkEvent, PersistedConfigWire, PoolStatusWire, ProviderWire, RuntimeStateEvent, SettingsResult } from './bridge.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -232,11 +232,29 @@ const toolRegistry = new ToolRegistry(systemDeps);
 // ── Gateway + chat ──────────────────────────────────────────────────────────
 let gateway: ModelGateway | null = null;
 
+// Failover audit trail: every key-pool failover decision lands in the journal —
+// the record shows which key failed, why, and which key took over.
+function journalPoolAttempt(e: PoolAttemptEvent): void {
+  journal?.append({
+    type: 'pool.failover',
+    payload: { from: e.from, to: e.to, reason: e.reason, ...(e.status !== undefined ? { status: e.status } : {}) },
+    acknowledged: false,
+  });
+}
+
 function rebuildGateway(): void {
   const cfg = settingsStore.load();
-  gateway = cfg.cloudProviders.length > 0
-    ? new ModelGateway(cfg, (handle) => vault.resolve(handle))
-    : null;
+  if (cfg.cloudProviders.length === 0) {
+    gateway = null;
+    return;
+  }
+  if (gateway !== null) {
+    // Preserve pool health across settings edits: cooldowns, round-robin
+    // position and session counters survive; only routes swap.
+    gateway.reconfigure(cfg);
+    return;
+  }
+  gateway = new ModelGateway(cfg, (handle) => vault.resolve(handle), { onAttempt: journalPoolAttempt });
 }
 rebuildGateway();
 
@@ -276,6 +294,7 @@ async function probeBroker(): Promise<void> {
 
 // ── Settings IPC ────────────────────────────────────────────────────────────
 function toWire(cfg: ReturnType<typeof loadConfig>): PersistedConfigWire {
+  const pool = effectivePool(cfg);
   return {
     cloudProviders: cfg.cloudProviders.map((p): ProviderWire => ({
       endpointId: p.endpointId,
@@ -288,6 +307,7 @@ function toWire(cfg: ReturnType<typeof loadConfig>): PersistedConfigWire {
       keyPresent: p.authHandle !== '' && vault.resolve(p.authHandle) !== undefined,
     })),
     ...(cfg.selectedProviderId !== undefined ? { selectedProviderId: cfg.selectedProviderId } : {}),
+    ...(pool.length > 0 ? { activeProviderIds: pool } : {}),
     ...(cfg.agreementAcceptedAt !== undefined ? { agreementAcceptedAt: cfg.agreementAcceptedAt } : {}),
     ...(cfg.allowCommandExecution === true ? { allowCommandExecution: true } : {}),
     allowLocalModels: cfg.allowLocalModels,
@@ -399,6 +419,15 @@ ipcMain.handle('settings:saveProvider', (_event, raw: unknown): SettingsResult =
     ...cfg.cloudProviders.filter(c => c.endpointId !== p.endpointId),
     p,
   ];
+  // Key-pool auto-join (v0.4): every key Master registers is meant to be USED —
+  // new providers join the active pool automatically (untick in Providers to opt
+  // a key out). Legacy selection stays anchored to the pool head for old builds.
+  if (!existing) {
+    const pool = effectivePool(cfg);
+    if (!pool.includes(p.endpointId)) pool.push(p.endpointId);
+    cfg.activeProviderIds = pool;
+    if (pool.length > 0) cfg.selectedProviderId = pool[0]!;
+  }
   try {
     settingsStore.save(cfg);
   } catch (err) {
@@ -421,6 +450,16 @@ ipcMain.handle('settings:deleteProvider', (_event, raw: unknown): SettingsResult
     }
     const next = { ...cfg, cloudProviders: cfg.cloudProviders.filter(c => c.endpointId !== id) };
     if (next.selectedProviderId === id) delete next.selectedProviderId;
+    // A deleted key leaves the pool with it.
+    if (next.activeProviderIds !== undefined) {
+      const pool = next.activeProviderIds.filter(pid => pid !== id);
+      if (pool.length > 0) {
+        next.activeProviderIds = pool;
+        next.selectedProviderId = pool[0]!;
+      } else {
+        delete next.activeProviderIds;
+      }
+    }
     settingsStore.save(next);
     rebuildGateway();
     return { ok: true, config: toWire(next) };
@@ -445,6 +484,46 @@ ipcMain.handle('settings:selectProvider', (_event, raw: unknown): SettingsResult
     return { ok: true, config: toWire(cfg) };
   } catch (err) {
     return { ok: false, error: `select failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+});
+
+// Key pool membership (v0.4): the ordered set of keys Fairy routes through.
+// Every change is journalled — the record shows exactly which keys were armed.
+ipcMain.handle('settings:setActiveProviders', (_event, raw: unknown): SettingsResult => {
+  if (!Array.isArray(raw) || raw.some(x => typeof x !== 'string' || x.length === 0 || x.length > 64)) {
+    return { ok: false, error: 'invalid pool payload (expected array of provider ids)' };
+  }
+  try {
+    const cfg = settingsStore.load();
+    const known = new Set(cfg.cloudProviders.map(c => c.endpointId));
+    const ids = [...new Set(raw as string[])].filter(id => known.has(id)).slice(0, 32);
+    const before = effectivePool(cfg);
+    if (ids.length > 0) {
+      cfg.activeProviderIds = ids;
+      cfg.selectedProviderId = ids[0]!; // legacy anchor — old builds still route
+    } else {
+      delete cfg.activeProviderIds;
+      delete cfg.selectedProviderId;
+    }
+    settingsStore.save(cfg);
+    rebuildGateway();
+    journal?.append({
+      type: 'settings.pool',
+      payload: { ids, added: ids.filter(id => !before.includes(id)), removed: before.filter(id => !ids.includes(id)) },
+      acknowledged: true,
+    });
+    return { ok: true, config: toWire(cfg) };
+  } catch (err) {
+    return { ok: false, error: `pool update failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+});
+
+// Live pool routing state for the Status HUD — measured, not remembered.
+ipcMain.handle('settings:poolStatus', (): { ok: boolean; status?: PoolStatusWire; error?: string } => {
+  try {
+    return { ok: true, status: gateway?.poolStatus() ?? { activeIds: [], registered: 0, cooling: [], requests: 0, failovers: 0 } };
+  } catch (err) {
+    return { ok: false, error: `pool status failed: ${err instanceof Error ? err.message : String(err)}` };
   }
 });
 
@@ -498,6 +577,11 @@ function seedProviderFromEnv(): void {
         : {}),
     },
   ];
+  // Seeded keys join the pool like hand-added ones.
+  const pool = effectivePool(cfg);
+  if (!pool.includes(endpointId)) pool.push(endpointId);
+  cfg.activeProviderIds = pool;
+  cfg.selectedProviderId = pool[0]!;
   settingsStore.save(cfg);
   rebuildGateway();
 }

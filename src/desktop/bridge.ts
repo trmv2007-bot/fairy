@@ -21,6 +21,8 @@ export interface ProviderWire {
 export interface PersistedConfigWire {
   cloudProviders: ProviderWire[];
   selectedProviderId?: string;
+  /** Effective key-pool member ids (explicit pool, else legacy selection). */
+  activeProviderIds?: string[];
   allowLocalModels: boolean;
   /** ISO timestamp of the user-agreement signing; absent until the user signs. */
   agreementAcceptedAt?: string;
@@ -42,6 +44,24 @@ export interface SettingsResult {
   ok: boolean;
   error?: string;
   config?: PersistedConfigWire;
+}
+
+// ── Key pool (v0.4) ─────────────────────────────────────────────────────────
+
+/** Live routing state of the key pool — measured in the main process. */
+export interface PoolStatusWire {
+  activeIds: string[];
+  registered: number;
+  lastUsedId?: string;
+  cooling: { id: string; untilMs: number; reason: string }[];
+  requests: number;
+  failovers: number;
+}
+
+export interface PoolStatusResult {
+  ok: boolean;
+  error?: string;
+  status?: PoolStatusWire;
 }
 
 export interface SystemSnapshotResult {
@@ -91,6 +111,10 @@ export interface FairyBridge {
     saveProvider(p: SaveProviderPayload): Promise<SettingsResult>;
     deleteProvider(id: string): Promise<SettingsResult>;
     selectProvider(id: string | null): Promise<SettingsResult>;
+    /** Set the ordered key pool (empty array = auto routing, no preference). */
+    setActiveProviders(ids: string[]): Promise<SettingsResult>;
+    /** Live pool routing state for the Status HUD. */
+    poolStatus(): Promise<PoolStatusResult>;
     /** Records the user-agreement signing (idempotent; journal event + persisted timestamp). */
     acceptAgreement(): Promise<SettingsResult>;
     /** Arms or disarms the command_run tool (journaled both ways). */

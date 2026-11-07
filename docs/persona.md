@@ -194,6 +194,7 @@ The runtime SYSTEM_PROMPT distills §4 and the tool layer (§3a):
 | ~80% device access (in *this* world: her host machine) | v0.2 tool layer — function-calling loop in `chat.ts` + `ToolRegistry` (§3a); tool activity chips render her live "operational readout" in Chat |
 | Power draw / battery, for real | Status HUD "Device readout": measured OS/CPU/memory/power/displays/uptime via `system:snapshot` IPC, refreshed every 10 s |
 | "Fairy asks, Master authorizes" | `command_run` stays **disarmed** until Master ticks "Controlled command execution" (Status tab); every flip is journalled (`settings.command-execution`) |
+| Redundant power feeds for her 24/7 draw (electricity gag) | **Key pool (v0.4)**: multiple API keys, all used — round-robin routing, automatic failover on 429/401/5xx/network before any text streams, per-key cooldowns (90 s rate-limited / 15 min auth-rejected / 20 s transient); live pool HUD in Status (active keys, last used, cooling, failover count); every failover journalled (`pool.failover`) |
 | Native broker = her H.D.D. | `window.list` op backed by EnumWindows (`SysHost.cs`); broker polled every 30 s so the H.D.D. link indicator stays honest |
 
 No real-world equivalent exists for Hollow/Ether mechanics; those stay lore

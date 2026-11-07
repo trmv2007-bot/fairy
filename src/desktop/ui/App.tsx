@@ -4,7 +4,7 @@ import { Panel } from './Panel.js';
 import { Chat } from './Chat.js';
 import { Boot } from './Boot.js';
 import { SettingsPanel } from '../settings-ui.js';
-import type { PersistedConfigWire, SaveProviderPayload, SystemSnapshot } from '../bridge.js';
+import type { PersistedConfigWire, PoolStatusWire, SaveProviderPayload, SystemSnapshot } from '../bridge.js';
 
 type OrbState = 'idle' | 'listening' | 'thinking' | 'working' | 'approval-needed' | 'paused' | 'error';
 type Tab = 'chat' | 'status' | 'providers';
@@ -181,6 +181,67 @@ function DeviceReadout(): React.ReactElement {
   );
 }
 
+/** Live key-pool routing state — measured in the main process, none invented. */
+function PoolReadout(): React.ReactElement {
+  const [snap, setSnap] = useState<PoolStatusWire | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const refresh = (): void => {
+      window.fairy.settings.poolStatus().then(res => {
+        if (!alive) return;
+        if (res.ok && res.status) { setSnap(res.status); setErr(null); }
+        else setErr(res.error ?? 'pool status failed');
+      }).catch(() => { if (alive) setErr('pool status failed'); });
+    };
+    refresh();
+    const timer = setInterval(refresh, 10_000); // cooldowns tick down live
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  if (err) {
+    return <p style={{ color: 'var(--f-warn)', fontFamily: 'var(--f-mono)', fontSize: 11 }}>{err}</p>;
+  }
+  if (!snap) {
+    return <p className="f-label">reading key pool…</p>;
+  }
+  const cooling = snap.cooling.map(c => `${c.id} (${c.reason})`).join(' · ');
+  return (
+    <div aria-label="Key pool readout">
+      <div className="f-heading" style={{ marginTop: 0 }}>Key pool</div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Active keys</span>
+        <strong>
+          {snap.activeIds.length} of {snap.registered} · round-robin
+          {snap.activeIds.length > 0 && (
+            <span style={{ display: 'block', marginTop: 2, fontSize: 11, color: 'var(--f-muted)' }}>
+              {snap.activeIds.join(' · ')}
+            </span>
+          )}
+        </strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Last key used</span>
+        <strong>{snap.lastUsedId ?? '—'}</strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Cooling keys</span>
+        <strong style={{ color: snap.cooling.length > 0 ? 'var(--f-warn)' : 'var(--f-muted)' }}>
+          {snap.cooling.length > 0 ? cooling : 'none'}
+        </strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Routed · failovers</span>
+        <strong>{snap.requests} · {snap.failovers}</strong>
+      </div>
+    </div>
+  );
+}
+
 export function App(): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('chat');
@@ -212,6 +273,7 @@ export function App(): React.ReactElement {
   const hasProvider = (config?.cloudProviders.length ?? 0) > 0;
   // Boot gate: the agreement overlay shows until the signature exists on disk.
   const agreementSigned = config?.agreementAcceptedAt !== undefined;
+  const poolIds = config?.activeProviderIds ?? [];
 
   const onSignAgreement = useCallback(async () => {
     try {
@@ -257,15 +319,21 @@ export function App(): React.ReactElement {
     }
   }, []);
 
-  const onSelectProvider = useCallback(async (id: string | null) => {
+  // Key-pool membership: tick a key in/out of the round-robin. Order follows the
+  // registered list; the pool persists and is journalled in the main process.
+  const onTogglePoolMember = useCallback(async (id: string) => {
+    const current = config?.activeProviderIds ?? [];
+    const next = current.includes(id)
+      ? current.filter(x => x !== id)
+      : [...current, id];
     try {
-      const res = await window.fairy.settings.selectProvider(id);
+      const res = await window.fairy.settings.setActiveProviders(next);
       if (res.config) setConfig(res.config);
-      else if (res.error) setNotice(res.error);
+      else setNotice(res.error ?? 'pool update failed');
     } catch (err) {
-      setNotice(`selection failed: ${err instanceof Error ? err.message : String(err)}`);
+      setNotice(`pool update failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, []);
+  }, [config]);
 
   return (
     <div className="hud-corners" style={{ padding: 18, minHeight: '100vh', boxSizing: 'border-box' }}>
@@ -302,11 +370,13 @@ export function App(): React.ReactElement {
               hasProvider={hasProvider}
               onOpenProviders={() => setTab('providers')}
               brokerOnline={brokerOnline}
+              poolSize={poolIds.length}
             />
           )}
           {tab === 'status' && (
             <div>
               <DeviceReadout />
+              <PoolReadout />
               <div className="f-heading">Operational status</div>
               <div className="f-row" style={rowStyle}>
                 <span className="f-label">Assistant state</span>
@@ -369,14 +439,17 @@ export function App(): React.ReactElement {
           {tab === 'providers' && (
             <div>
               <div className="f-heading" style={{ marginTop: 0 }}>Cloud providers</div>
+              <p className="f-label" style={{ margin: '0 0 8px' }}>
+                Key pool: {poolIds.length} of {config?.cloudProviders.length ?? 0} active · round-robin with failover
+              </p>
               {(config?.cloudProviders ?? []).map(p => (
                 <div key={p.endpointId} className="f-row" style={rowStyle}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <input
-                      type="radio"
-                      name="selected-provider"
-                      checked={config?.selectedProviderId === p.endpointId}
-                      onChange={() => void onSelectProvider(p.endpointId)}
+                      type="checkbox"
+                      aria-label={`Pool member ${p.endpointId}`}
+                      checked={poolIds.includes(p.endpointId)}
+                      onChange={() => void onTogglePoolMember(p.endpointId)}
                     />
                     <span>
                       <strong>{p.endpointId}</strong>
@@ -401,9 +474,13 @@ export function App(): React.ReactElement {
               <div className="f-heading">Add provider</div>
               <SettingsPanel onSave={(p) => void onSaveProvider(p)} saving={saving} />
               <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
-                Keys are encrypted by the OS (DPAPI/keychain) and never stored in plain
-                text; the persisted config keeps opaque handles only. Your keys stay
-                yours — Fairy merely remembers them.
+                Every key you save joins the active pool automatically: Fairy routes
+                requests round-robin across all ticked keys, fails over when one is
+                rate-limited or dead, and cools it down while the rest carry the load.
+                Register the same endpoint twice with different keys to pool one
+                provider. Keys are encrypted by the OS (DPAPI/keychain) and never
+                stored in plain text; the persisted config keeps opaque handles only.
+                Your keys stay yours — Fairy merely remembers them.
               </p>
             </div>
           )}

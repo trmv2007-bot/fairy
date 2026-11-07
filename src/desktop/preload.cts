@@ -27,6 +27,8 @@ const bridge: FairyBridge = {
     saveProvider: (p: SaveProviderPayload) => ipcRenderer.invoke('settings:saveProvider', p),
     deleteProvider: (id: string) => ipcRenderer.invoke('settings:deleteProvider', id),
     selectProvider: (id: string | null) => ipcRenderer.invoke('settings:selectProvider', id),
+    setActiveProviders: (ids: string[]) => ipcRenderer.invoke('settings:setActiveProviders', ids),
+    poolStatus: () => ipcRenderer.invoke('settings:poolStatus'),
     acceptAgreement: () => ipcRenderer.invoke('settings:acceptAgreement'),
     setCommandExecution: (enabled: boolean) => ipcRenderer.invoke('settings:setCommandExecution', enabled),
   },

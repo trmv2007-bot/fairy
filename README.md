@@ -116,6 +116,17 @@ to `public, internal` — exactly what chat requests — so ticking "Included co
 is all it takes for the first message to work. If a route is blocked, the error
 names the exact provider and the knob to turn.
 
+**Key pool (multiple keys):** every saved key joins the active pool
+automatically — register the same endpoint twice with different keys (or mix
+providers) and Fairy routes requests round-robin across all of them. When a key
+answers 429/401/5xx or the connection fails **before any text has streamed**,
+the request fails over to the next key; the failing key goes on a cooldown
+(90 s rate-limited, 15 min auth-rejected, 20 s transient) while the rest carry
+the load. The Status tab shows the live pool state: active keys, last key used,
+cooling keys with reasons, and the failover counter. Failovers are journalled
+(`pool.failover`); pool edits are journalled too (`settings.pool`). Untick a
+key in Providers to take it out of the rotation.
+
 **Cloud-only mode (user directive):** local models are disabled at the registry
 level; enabling one throws. `includedCost` providers only — zero additional
 spend is encoded in the cloud route.

@@ -6,6 +6,8 @@ export interface ChatProps {
   hasProvider: boolean;
   onOpenProviders: () => void;
   brokerOnline: boolean;
+  /** Number of keys in the active pool (round-robin routing). */
+  poolSize?: number;
 }
 
 interface ToolChip {
@@ -65,7 +67,7 @@ const IDLE_QUIPS = [
   'Good news: threats hate optimal routing. Bad news: I have already rerouted around you.',
 ];
 
-export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps): React.ReactElement {
+export function Chat({ hasProvider, onOpenProviders, brokerOnline, poolSize = 0 }: ChatProps): React.ReactElement {
   const [messages, setMessages] = useState<ChatMessageWire[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -171,6 +173,15 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
         >
           broker {brokerOnline ? 'online' : 'offline'}
         </span>
+        {poolSize > 0 && (
+          <span
+            className="f-label"
+            title="Requests round-robin across every active key; failures fail over automatically"
+            style={{ whiteSpace: 'nowrap', color: poolSize > 1 ? 'var(--f-acc)' : 'var(--f-muted)' }}
+          >
+            key pool {poolSize}
+          </span>
+        )}
         <button type="button" className="f-btn" onClick={() => void clear()} disabled={streaming}>
           Clear
         </button>

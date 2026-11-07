@@ -6,6 +6,11 @@ import type { CloudProviderConfig } from './cloud.js';
 export interface FairyConfig {
   cloudProviders: CloudProviderConfig[];
   selectedProviderId?: string;
+  /**
+   * Ordered key-pool member ids (v0.4): Fairy round-robins across these and
+   * fails over between them. Absent = legacy single-selection routing.
+   */
+  activeProviderIds?: string[];
   // local models disabled by default (cloud-only mode)
   allowLocalModels: boolean;
   /** ISO timestamp of the user-agreement signing (canon: Fairy compels the contract). */
@@ -69,6 +74,17 @@ export function loadConfig(raw: unknown): FairyConfig {
   const selected = selectedRaw !== undefined && providers.some(p => p.endpointId === selectedRaw)
     ? selectedRaw
     : undefined;
+  // Key pool: ordered, deduped, and only ids that actually exist survive — a
+  // deleted provider must silently leave the pool, not crash routing.
+  const activeRaw = Array.isArray(r.activeProviderIds) ? r.activeProviderIds : undefined;
+  const active = activeRaw !== undefined
+    ? [...new Set(
+        activeRaw
+          .filter((s): s is string => typeof s === 'string' && s.length > 0 && s.length <= 64)
+          .filter(s => providers.some(p => p.endpointId === s)),
+      )].slice(0, MAX_PROVIDERS)
+    : undefined;
+  const activeIds = active !== undefined && active.length > 0 ? active : undefined;
   // Agreement timestamp: accept only ISO-8601-shaped strings, capped for safety.
   const agreementAcceptedAt = typeof r.agreementAcceptedAt === 'string'
     && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(r.agreementAcceptedAt)
@@ -79,10 +95,21 @@ export function loadConfig(raw: unknown): FairyConfig {
     cloudProviders: providers,
     allowLocalModels: r.allowLocalModels === true, // policy: stays false in cloud-only mode
     ...(selected !== undefined ? { selectedProviderId: selected } : {}),
+    ...(activeIds !== undefined ? { activeProviderIds: activeIds } : {}),
     ...(agreementAcceptedAt !== undefined ? { agreementAcceptedAt } : {}),
     ...(r.allowCommandExecution === true ? { allowCommandExecution: true } : {}),
   };
   return cfg;
+}
+
+/**
+ * The pool the gateway should route through: explicit activeProviderIds when
+ * present, else the legacy single selection, else [] (auto routing).
+ */
+export function effectivePool(cfg: FairyConfig): string[] {
+  if (cfg.activeProviderIds !== undefined) return [...cfg.activeProviderIds];
+  if (cfg.selectedProviderId !== undefined) return [cfg.selectedProviderId];
+  return [];
 }
 
 /**
