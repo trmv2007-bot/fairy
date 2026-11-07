@@ -8,6 +8,7 @@ import type {
   FairyBridge,
   RuntimeStateEvent,
   SaveProviderPayload,
+  ToolActivityEvent,
 } from './bridge.js';
 
 function subscribe<T>(channel: string, cb: (e: T) => void): () => void {
@@ -27,6 +28,7 @@ const bridge: FairyBridge = {
     deleteProvider: (id: string) => ipcRenderer.invoke('settings:deleteProvider', id),
     selectProvider: (id: string | null) => ipcRenderer.invoke('settings:selectProvider', id),
     acceptAgreement: () => ipcRenderer.invoke('settings:acceptAgreement'),
+    setCommandExecution: (enabled: boolean) => ipcRenderer.invoke('settings:setCommandExecution', enabled),
   },
   chat: {
     send: (text: string) => ipcRenderer.invoke('chat:send', text),
@@ -34,6 +36,10 @@ const bridge: FairyBridge = {
     onChunk: (cb: (e: ChatChunkEvent) => void) => subscribe<ChatChunkEvent>('chat:chunk', cb),
     onState: (cb: (e: RuntimeStateEvent) => void) => subscribe<RuntimeStateEvent>('runtime:state', cb),
     onBrokerState: (cb: (e: BrokerStateEvent) => void) => subscribe<BrokerStateEvent>('broker:state', cb),
+    onToolActivity: (cb: (e: ToolActivityEvent) => void) => subscribe<ToolActivityEvent>('chat:tool', cb),
+  },
+  system: {
+    snapshot: () => ipcRenderer.invoke('system:snapshot'),
   },
 };
 

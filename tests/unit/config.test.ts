@@ -66,6 +66,42 @@ describe('loadConfig sanitization', () => {
   });
 });
 
+describe('allowCommandExecution (command_run gate)', () => {
+  it('defaults off and only activates on an explicit true', () => {
+    expect(loadConfig({}).allowCommandExecution).toBeUndefined();
+    expect(loadConfig({ allowCommandExecution: true }).allowCommandExecution).toBe(true);
+    expect(loadConfig({ allowCommandExecution: false }).allowCommandExecution).toBeUndefined();
+    expect(loadConfig({ allowCommandExecution: 'yes' }).allowCommandExecution).toBeUndefined();
+    expect(loadConfig({ allowCommandExecution: 1 }).allowCommandExecution).toBeUndefined();
+  });
+
+  it('round-trips through persistence (off -> on -> off)', async () => {
+    const { SettingsStore } = await import('../../src/storage/settings.js');
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const dir = mkdtempSync(path.join(tmpdir(), 'fairy-cfg-'));
+    const file = path.join(dir, 'cfg.json');
+    try {
+      const store = new SettingsStore(file);
+      expect(store.load().allowCommandExecution).toBeUndefined();
+      const on = store.load();
+      on.allowCommandExecution = true;
+      store.save(on);
+      expect(store.load().allowCommandExecution).toBe(true);
+      const off = store.load();
+      delete off.allowCommandExecution;
+      store.save(off);
+      expect(store.load().allowCommandExecution).toBeUndefined();
+      // raw file contains the flag when on
+      writeFileSync(file, JSON.stringify({ allowCommandExecution: true }));
+      expect(store.load().allowCommandExecution).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('sanitizeConfigForPersist', () => {
   it('recursively strips secret-shaped fields at any depth', () => {
     const dirty = {

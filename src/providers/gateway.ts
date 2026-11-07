@@ -1,7 +1,7 @@
 // Model gateway (T08): normalizes provider capabilities, routing, privacy/cost checks.
 import type { ProviderDescriptor } from '../contracts/providers.js';
 import { CloudProvider, CloudRouteError } from './cloud.js';
-import type { CloudChatMessage, CloudCompletion, CloudProviderConfig } from './cloud.js';
+import type { CloudChatMessage, CloudCompletion, CloudProviderConfig, CloudToolSpec } from './cloud.js';
 import type { FairyConfig } from './config.js';
 
 export type SecretResolver = (handle: string) => string | undefined;
@@ -91,13 +91,16 @@ export class ModelGateway {
 
   /**
    * Message-list chat through the routed provider. When `onChunk` is supplied the
-   * request streams and every text delta is passed to it as it arrives.
+   * request streams and every text delta is passed to it as it arrives. When
+   * `tools` is supplied the provider may answer with tool_calls instead of text;
+   * the caller (chat service) executes them and loops.
    */
   async chat(
     messages: CloudChatMessage[],
     dataScopes: string[],
     needsVision = false,
     onChunk?: (delta: string) => void,
+    tools?: CloudToolSpec[],
   ): Promise<CloudCompletion> {
     const provider = this.selectFor(dataScopes, needsVision);
     if (!provider) {
@@ -109,8 +112,9 @@ export class ModelGateway {
     if (!this.secretResolver) throw new CloudRouteError('gateway has no secret resolver configured');
     const apiKey = this.secretResolver(provider.cfg.authHandle);
     if (!apiKey) throw new CloudRouteError(`no key in vault for provider '${provider.cfg.endpointId}'`);
-    if (onChunk) return provider.chatStream(messages, { apiKey }, onChunk);
-    return provider.chat(messages, { apiKey });
+    const toolsOpt = tools !== undefined && tools.length > 0 ? { tools } : {};
+    if (onChunk) return provider.chatStream(messages, { apiKey, ...toolsOpt }, onChunk);
+    return provider.chat(messages, { apiKey, ...toolsOpt });
   }
 
   descriptor(id: string): ProviderDescriptor | null {
@@ -119,7 +123,7 @@ export class ModelGateway {
     return {
       endpointId: p.cfg.endpointId,
       modelId: p.cfg.model ?? 'default',
-      capabilities: { text: true, tools: false, vision: p.cfg.supportsVision === true, streaming: true },
+      capabilities: { text: true, tools: true, vision: p.cfg.supportsVision === true, streaming: true },
       contextLimit: 8_000, // conservative default until per-connection discovery (T08 follow-up)
       authHandle: p.cfg.authHandle,
       allowedDataScopes: [...p.cfg.allowedDataScopes],

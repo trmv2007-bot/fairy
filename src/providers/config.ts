@@ -10,6 +10,8 @@ export interface FairyConfig {
   allowLocalModels: boolean;
   /** ISO timestamp of the user-agreement signing (canon: Fairy compels the contract). */
   agreementAcceptedAt?: string;
+  /** Master's explicit opt-in for the command_run tool (default: off). */
+  allowCommandExecution?: boolean;
 }
 
 export const DEFAULT_CONFIG: FairyConfig = {
@@ -78,6 +80,7 @@ export function loadConfig(raw: unknown): FairyConfig {
     allowLocalModels: r.allowLocalModels === true, // policy: stays false in cloud-only mode
     ...(selected !== undefined ? { selectedProviderId: selected } : {}),
     ...(agreementAcceptedAt !== undefined ? { agreementAcceptedAt } : {}),
+    ...(r.allowCommandExecution === true ? { allowCommandExecution: true } : {}),
   };
   return cfg;
 }

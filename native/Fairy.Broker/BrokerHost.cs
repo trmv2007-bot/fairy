@@ -47,6 +47,7 @@ public sealed class BrokerHost
                 "egress.check" => EgressCheck(req.Payload),
                 "policy.issue" => PolicyIssue(req.Payload),
                 "policy.consume" => PolicyConsume(req.Payload),
+                "window.list" => WindowList(),
                 _ => throw new InvalidOperationException($"unknown op '{req.Op}'"),
             };
             return BrokerResponse.Ok(req.Id, result);
@@ -58,6 +59,17 @@ public sealed class BrokerHost
     }
 
     private static object Ping() => new { pong = true, version = ProtocolVersion };
+
+    /// <summary>Real Windows integration: EnumWindows-backed window sweep (SysHost).</summary>
+    private static object WindowList()
+    {
+        if (!SysHost.IsSupported)
+        {
+            throw new PlatformNotSupportedException("window.list requires Windows (EnumWindows)");
+        }
+        var windows = SysHost.ListWindows();
+        return new { windows };
+    }
 
     /// <summary>payload: { root, requested } -> { resolved: string|null }. Path stays jailed.</summary>
     private object SandboxResolve(JsonElement? payload)

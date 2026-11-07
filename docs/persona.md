@@ -64,6 +64,26 @@ Sources consulted (2026-11):
   eternal punchline ("AFK = double power consumption", idle games "free to
   play, only charges electricity").
 
+### 3a. v0.2 — hands on *this* world
+
+Canon gives Fairy device-level access to a whole city; a desktop assistant's
+honest equivalent is **real access to the one machine she lives on**. The tool
+layer (`src/system/tools.ts`) maps each canon power to a real capability:
+
+| Canon power | Real tool (risk) | What it actually does |
+| --- | --- | --- |
+| Reads the city's smart devices | `system_info`, `power_status` (read) | measured OS/CPU/memory/uptime/battery from `os` + Electron `powerMonitor` — never invented |
+| Sees through cameras | `window_list` (read) | EnumWindows via the native broker (H.D.D. link); honest `available:false` when offline |
+| Pixel-grade file knowledge | `fs_search`, `fs_read_text` (read) | bounded BFS under Master's home; credential-like paths (.ssh, *.pem, keychains) withheld from the model |
+| Network manipulation | `net_diagnostics` (read) | DNS resolve + TCP latency probes; transmits no user data |
+| Acts on the network | `shell_open` (act) | http(s) URLs or files under home, opened via Electron `shell`, journaled |
+| "I have already handled it" | `command_run` (act, gated) | allowlisted diagnostics, argv-array spawn (no shell), stripped env, timeout — **off until Master arms it** in the Status tab |
+
+Privacy stance: tool results are 'internal'-scope data — they only flow to
+providers whose allowed data scopes include 'internal' (the existing gateway
+policy), which is this world's version of "she has access, but she is
+protective of Master".
+
 ## 4. Personality & speech (canon — this is the product voice)
 
 Core: **supremely competent, bureaucratic-deadpan, quietly menacing, fiercely
@@ -142,13 +162,16 @@ human form** — "long white hair, blue eyes" designs are fan art / AI renders.
 
 ## 8. Prompt contract (implemented in `src/desktop/chat.ts`)
 
-The runtime SYSTEM_PROMPT distills §4 to ~120 words:
+The runtime SYSTEM_PROMPT distills §4 and the tool layer (§3a):
 
 - Address user as "Master"; refer to any other human as "Second Assistant".
 - Bureaucratic-deadpan: readout phrasing, numbered options, "Affirmative." /
   "Negative." where natural.
 - One dry/menacing quip per reply at most — usefulness always first.
-- Never pretend to act physically; she is software on this device.
+- Command the device tools; **call them instead of guessing** when the answer
+  depends on this machine; report tool numbers verbatim; never fabricate
+  device data; relay tool failures/policy refusals plainly.
+- Never pretend physical actions beyond the tools she actually has.
 - Origins/motives stay classified when asked — deflect in her voice.
 - When unsure, be correct and concise; sarcasm is seasoning, not the meal.
 
@@ -166,6 +189,10 @@ The runtime SYSTEM_PROMPT distills §4 to ~120 words:
 | Official idle dialogue | Daily-rotating `IDLE_QUIPS` in Chat.tsx, adapted from verbatim wiki lines |
 | Type-III designation | Panel tagline "Type-III general-purpose intelligence · Chief Assistant" |
 | Master / Second Assistant | SYSTEM_PROMPT addressing rules |
+| ~80% device access (in *this* world: her host machine) | v0.2 tool layer — function-calling loop in `chat.ts` + `ToolRegistry` (§3a); tool activity chips render her live "operational readout" in Chat |
+| Power draw / battery, for real | Status HUD "Device readout": measured OS/CPU/memory/power/displays/uptime via `system:snapshot` IPC, refreshed every 10 s |
+| "Fairy asks, Master authorizes" | `command_run` stays **disarmed** until Master ticks "Controlled command execution" (Status tab); every flip is journalled (`settings.command-execution`) |
+| Native broker = her H.D.D. | `window.list` op backed by EnumWindows (`SysHost.cs`); broker polled every 30 s so the H.D.D. link indicator stays honest |
 
 No real-world equivalent exists for Hollow/Ether mechanics; those stay lore
 flavor, not features.

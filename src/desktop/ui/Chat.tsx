@@ -1,11 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatMessageWire } from '../bridge.js';
+import type { ChatMessageWire, ToolActivityEvent } from '../bridge.js';
 
 export interface ChatProps {
   /** Whether any provider is configured — drives the empty-state hint. */
   hasProvider: boolean;
   onOpenProviders: () => void;
   brokerOnline: boolean;
+}
+
+interface ToolChip {
+  key: number;
+  name: string;
+  label: string;
+  status: 'start' | 'ok' | 'error';
+  durationMs?: number;
+  summary?: string;
 }
 
 const rowSelf: React.CSSProperties = {
@@ -61,21 +70,44 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tools, setTools] = useState<ToolChip[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages]);
+  }, [messages, tools]);
 
   const send = useCallback(async () => {
     const text = input.trim();
     if (text.length === 0 || streaming) return;
     setInput('');
     setError(null);
+    setTools([]); // one activity log per outgoing turn
     const localId = 'local_' + Date.now().toString(36);
     setMessages(m => [...m, { id: localId, role: 'user', content: text }]);
     setStreaming(true);
+
+    let chipSeq = 0;
+    const applyToolEvent = (e: ToolActivityEvent): void => {
+      setTools(prev => {
+        if (e.status === 'start') {
+          return [...prev, { key: ++chipSeq, name: e.name, label: e.label, status: 'start' }];
+        }
+        // resolve the most recent unresolved chip with the same tool name
+        const idx = [...prev].reverse().findIndex(c => c.name === e.name && c.status === 'start');
+        if (idx === -1) return prev;
+        const realIdx = prev.length - 1 - idx;
+        const next = [...prev];
+        next[realIdx] = {
+          ...next[realIdx]!,
+          status: e.status,
+          ...(e.durationMs !== undefined ? { durationMs: e.durationMs } : {}),
+          ...(e.summary !== undefined ? { summary: e.summary } : {}),
+        };
+        return next;
+      });
+    };
 
     const off = window.fairy.chat.onChunk(({ messageId, delta }) => {
       setMessages(m => {
@@ -86,11 +118,20 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
         return next;
       });
     });
+    const offTool = window.fairy.chat.onToolActivity(applyToolEvent);
     try {
       const res = await window.fairy.chat.send(text);
       if (res.ok && res.message) {
-        // In case the provider did not stream any deltas, add the final message.
-        setMessages(m => (m.some(x => x.id === res.message!.id) ? m : [...m, res.message!]));
+        // The resolved message is AUTHORITATIVE: add it when absent, and replace
+        // any partially-streamed bubble — a self-heal against delta loss on the
+        // IPC hop (invoke replies can overtake queued chunk events).
+        setMessages(m => {
+          const idx = m.findIndex(x => x.id === res.message!.id);
+          if (idx === -1) return [...m, res.message!];
+          const next = [...m];
+          next[idx] = res.message!;
+          return next;
+        });
       } else if (!res.ok) {
         setError(res.error ?? 'send failed');
       }
@@ -98,6 +139,7 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
       setError(`send failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       off();
+      offTool();
       setStreaming(false);
       inputRef.current?.focus();
     }
@@ -105,8 +147,10 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
 
   const clear = useCallback(async () => {
     const res = await window.fairy.chat.clear();
-    if (res.ok) setMessages([]);
-    else setError(res.error ?? 'clear failed');
+    if (res.ok) {
+      setMessages([]);
+      setTools([]);
+    } else setError(res.error ?? 'clear failed');
   }, []);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -170,6 +214,39 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
             {m.content}
           </div>
         ))}
+        {tools.length > 0 && (
+          <div
+            aria-label="Tool activity"
+            style={{
+              alignSelf: 'flex-start', maxWidth: '85%',
+              background: 'rgba(79, 140, 255, 0.06)',
+              border: '1px dashed var(--f-line)',
+              borderLeft: '2px solid var(--f-cyan)',
+              padding: '6px 10px', borderRadius: 6,
+              fontFamily: 'var(--f-mono)', fontSize: 11, lineHeight: 1.8,
+            }}
+          >
+            {tools.map(t => (
+              <div
+                key={t.key}
+                style={{
+                  color: t.status === 'error'
+                    ? 'var(--f-warn)'
+                    : t.status === 'start'
+                      ? 'var(--f-cyan)'
+                      : 'var(--f-muted)',
+                }}
+              >
+                ▸ {t.label}
+                {t.status === 'start'
+                  ? ' — executing…'
+                  : t.status === 'ok'
+                    ? ` — ${t.durationMs ?? 0}ms · ${t.summary ?? 'done'}`
+                    : ` — failed · ${t.summary ?? 'error'}`}
+              </div>
+            ))}
+          </div>
+        )}
         {streaming && (
           <div style={{ alignSelf: 'flex-start', color: 'var(--f-muted)', fontSize: 12, fontFamily: 'var(--f-mono)' }}>
             Processing

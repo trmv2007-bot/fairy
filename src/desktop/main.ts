@@ -1,10 +1,16 @@
 // Electron main process (T02/T30). Shell + settings + chat + orb window.
 // Renderer is fully sandboxed: contextIsolation on, nodeIntegration off, preload
 // exposes exactly the typed surface in bridge.ts — nothing else.
-import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
+// v0.2: Fairy's hands — the tool registry, real-device Status HUD snapshot, and
+// the chat tool-execution loop are wired here.
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell, powerMonitor } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { execFile } from 'node:child_process';
+import { connect as netConnect } from 'node:net';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import * as os from 'node:os';
 import { SettingsStore } from '../storage/settings.js';
 import { openDatabase } from '../storage/database.js';
 import { EventJournalImpl } from '../storage/journal.js';
@@ -12,8 +18,9 @@ import { loadConfig, sanitizeProvider } from '../providers/config.js';
 import { SecretVault } from '../providers/secret-vault.js';
 import { PersistedKeyStore, type KeyCodec } from '../providers/persisted-key-store.js';
 import { ModelGateway } from '../providers/gateway.js';
-import { ChatService } from './chat.js';
+import { ChatService, type ToolActivityEvent } from './chat.js';
 import { BrokerClient, BrokerClientError } from '../native/broker-client.js';
+import { ToolRegistry, buildSystemSnapshot, type SystemDeps, type SystemSnapshot } from '../system/tools.js';
 import type { BrokerStateEvent, ChatChunkEvent, PersistedConfigWire, ProviderWire, RuntimeStateEvent, SettingsResult } from './bridge.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -81,6 +88,28 @@ function broadcast(channel: string, payload: unknown): void {
   win?.webContents.send(channel, payload);
 }
 
+// Chunk coalescing: several `chat:chunk` broadcasts can fire within one tick
+// (streamed deltas arrive back-to-back). Electron has been observed to drop
+// same-channel bursts against a sandboxed renderer, and invoke replies can
+// overtake queued events. Batching each tick's deltas into ONE ipc message —
+// flushed on a microtask, which is ordered before the chat:send reply leaves
+// the process — removes both hazards and cuts re-renders.
+const chunkBatch = new Map<string, string>();
+let chunkFlushQueued = false;
+function broadcastChunkChunked(messageId: string, delta: string): void {
+  chunkBatch.set(messageId, (chunkBatch.get(messageId) ?? '') + delta);
+  if (chunkFlushQueued) return;
+  chunkFlushQueued = true;
+  queueMicrotask(() => {
+    chunkFlushQueued = false;
+    const pending = [...chunkBatch.entries()];
+    chunkBatch.clear();
+    for (const [id, text] of pending) {
+      broadcast('chat:chunk', { messageId: id, delta: text } satisfies ChatChunkEvent);
+    }
+  });
+}
+
 // ── Stores ──────────────────────────────────────────────────────────────────
 const settingsPath = path.join(app.getPath('userData'), 'fairy-config.json');
 const settingsStore = new SettingsStore(settingsPath);
@@ -105,6 +134,101 @@ try {
   console.error('[fairy] journal unavailable (chat still works):', err);
 }
 
+// ── Fairy's hands: real device dependencies for the tool registry ──────────
+// Electron surfaces (shell/powerMonitor/screen) plus plain Node transports; the
+// broker is preferred for Windows-specific data and degrades honestly when offline.
+const systemDeps: SystemDeps = {
+  versions: () => ({
+    node: process.versions.node ?? '?',
+    electron: process.versions.electron ?? '?',
+    chrome: process.versions.chrome ?? '?',
+  }),
+  battery: () => {
+    try {
+      // getSystemBatteryState() exists on modern Electron builds; the typings lag.
+      const pm = powerMonitor as typeof powerMonitor & {
+        getSystemBatteryState?: () => { charging: boolean; percent: number; hasBattery?: boolean };
+      };
+      if (typeof pm.getSystemBatteryState === 'function') {
+        const s = pm.getSystemBatteryState();
+        const hasBattery = typeof s.hasBattery === 'boolean'
+          ? s.hasBattery
+          : s.percent < 100 || s.charging;
+        return { hasBattery, isCharging: s.charging, percent: s.percent };
+      }
+      // Fallback: drawing battery power proves a battery exists; level unknown.
+      return powerMonitor.isOnBatteryPower()
+        ? { hasBattery: true, isCharging: false, percent: -1 }
+        : null; // on AC / no battery info — report mains honestly
+    } catch {
+      return null;
+    }
+  },
+  displays: () => {
+    try {
+      return screen.getAllDisplays().map(d => ({ width: d.size.width, height: d.size.height }));
+    } catch {
+      return [];
+    }
+  },
+  openExternal: (url) => shell.openExternal(url),
+  openPath: (p) => shell.openPath(p),
+  brokerWindows: async () => {
+    try {
+      return await broker.windowList();
+    } catch {
+      return null; // H.D.D. link offline — window_list reports it honestly
+    }
+  },
+  tcpConnect: (host, port, timeoutMs) =>
+    new Promise<number>((resolve, reject) => {
+      const started = Date.now();
+      const sock = netConnect({ host, port });
+      const fail = (err: Error): void => {
+        sock.destroy();
+        reject(err);
+      };
+      sock.once('error', fail);
+      sock.setTimeout(timeoutMs, () => fail(new Error(`connect timeout after ${timeoutMs}ms`)));
+      sock.once('connect', () => {
+        const ms = Date.now() - started;
+        sock.destroy();
+        resolve(ms);
+      });
+    }),
+  dnsResolve: async (host) => {
+    const r = await dnsLookup(host, { all: true });
+    return r.map(a => a.address);
+  },
+  spawn: (command, args, opts) =>
+    new Promise(resolve => {
+      execFile(
+        command,
+        args,
+        { timeout: opts.timeoutMs, cwd: opts.cwd, env: opts.env, maxBuffer: 64 * 1024, windowsHide: true },
+        (err, stdout, stderr) => {
+          const e = err as (NodeJS.ErrnoException & { killed?: boolean }) | null;
+          const code = e === null
+            ? 0
+            : typeof e.code === 'number'
+              ? e.code
+              : e.code === 'ENOENT'
+                ? 127
+                : 1;
+          resolve({
+            code,
+            stdout: String(stdout ?? ''),
+            stderr: String(stderr ?? ''),
+            timedOut: e?.killed === true,
+          });
+        },
+      );
+    }),
+  roots: () => [os.homedir()],
+  now: () => Date.now(),
+};
+const toolRegistry = new ToolRegistry(systemDeps);
+
 // ── Gateway + chat ──────────────────────────────────────────────────────────
 let gateway: ModelGateway | null = null;
 
@@ -120,8 +244,13 @@ const chatService = new ChatService(
   () => gateway,
   journal,
   {
-    onChunk: (messageId, delta) => broadcast('chat:chunk', { messageId, delta } satisfies ChatChunkEvent),
+    onChunk: (messageId, delta) => broadcastChunkChunked(messageId, delta),
     onState: (state) => broadcast('runtime:state', { state } satisfies RuntimeStateEvent),
+    onToolActivity: (e) => broadcast('chat:tool', e satisfies ToolActivityEvent),
+  },
+  {
+    registry: toolRegistry,
+    allowCommandExecution: () => settingsStore.load().allowCommandExecution === true,
   },
 );
 
@@ -160,6 +289,7 @@ function toWire(cfg: ReturnType<typeof loadConfig>): PersistedConfigWire {
     })),
     ...(cfg.selectedProviderId !== undefined ? { selectedProviderId: cfg.selectedProviderId } : {}),
     ...(cfg.agreementAcceptedAt !== undefined ? { agreementAcceptedAt: cfg.agreementAcceptedAt } : {}),
+    ...(cfg.allowCommandExecution === true ? { allowCommandExecution: true } : {}),
     allowLocalModels: cfg.allowLocalModels,
   };
 }
@@ -190,6 +320,37 @@ ipcMain.handle('settings:acceptAgreement', (): SettingsResult => {
     return { ok: true, config: toWire(cfg) };
   } catch (err) {
     return { ok: false, error: `agreement failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+});
+
+// Master's explicit gate for the command_run tool — off by default, journalled
+// on every flip so the record shows WHO armed Fairy's hands.
+ipcMain.handle('settings:setCommandExecution', (_event, raw: unknown): SettingsResult => {
+  if (raw !== true && raw !== false) {
+    return { ok: false, error: 'invalid payload (expected boolean)' };
+  }
+  try {
+    const cfg = settingsStore.load();
+    if (raw) cfg.allowCommandExecution = true;
+    else delete cfg.allowCommandExecution;
+    settingsStore.save(cfg);
+    journal?.append({
+      type: 'settings.command-execution',
+      payload: { enabled: raw },
+      acknowledged: true,
+    });
+    return { ok: true, config: toWire(settingsStore.load()) };
+  } catch (err) {
+    return { ok: false, error: `command-execution toggle failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+});
+
+// Real device readout for the Status HUD — every value measured, none invented.
+ipcMain.handle('system:snapshot', (): { ok: boolean; snapshot?: SystemSnapshot; error?: string } => {
+  try {
+    return { ok: true, snapshot: buildSystemSnapshot(systemDeps) };
+  } catch (err) {
+    return { ok: false, error: `snapshot failed: ${err instanceof Error ? err.message : String(err)}` };
   }
 });
 
@@ -365,6 +526,8 @@ if (!gotLock) {
     }
     createWindow();
     void probeBroker();
+    // Keep the H.D.D. link indicator honest without a background storm.
+    setInterval(() => { void probeBroker(); }, 30_000).unref();
   }).catch((err: unknown) => {
     console.error('[fairy] startup failed:', err);
     dialog.showErrorBox('Fairy failed to start', err instanceof Error ? err.message : String(err));

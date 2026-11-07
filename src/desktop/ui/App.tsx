@@ -3,7 +3,7 @@ import { Orb, STATE_LABELS } from './Orb.js';
 import { Panel } from './Panel.js';
 import { Chat } from './Chat.js';
 import { SettingsPanel } from '../settings-ui.js';
-import type { PersistedConfigWire, SaveProviderPayload } from '../bridge.js';
+import type { PersistedConfigWire, SaveProviderPayload, SystemSnapshot } from '../bridge.js';
 
 type OrbState = 'idle' | 'listening' | 'thinking' | 'working' | 'approval-needed' | 'paused' | 'error';
 type Tab = 'chat' | 'status' | 'providers';
@@ -89,6 +89,97 @@ const STATE_COLORS: Record<OrbState, string> = {
 
 const RUNTIME_STATES: OrbState[] = ['idle', 'thinking', 'working', 'error'];
 
+/** Live device readout — real values measured in the main process, none invented. */
+function DeviceReadout(): React.ReactElement {
+  const [snap, setSnap] = useState<SystemSnapshot | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const refresh = (): void => {
+      window.fairy.system.snapshot().then(res => {
+        if (!alive) return;
+        if (res.ok && res.snapshot) { setSnap(res.snapshot); setErr(null); }
+        else setErr(res.error ?? 'snapshot failed');
+      }).catch(() => { if (alive) setErr('snapshot failed'); });
+    };
+    refresh();
+    const timer = setInterval(refresh, 10_000); // live, not a screenshot
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  if (err) {
+    return <p style={{ color: 'var(--f-warn)', fontFamily: 'var(--f-mono)', fontSize: 11 }}>{err}</p>;
+  }
+  if (!snap) {
+    return <p className="f-label">measuring device…</p>;
+  }
+  const usedMb = Math.max(0, snap.memoryTotalMb - snap.memoryFreeMb);
+  const usedPct = snap.memoryTotalMb > 0 ? Math.round((usedMb / snap.memoryTotalMb) * 100) : 0;
+  const batteryText = snap.battery === null
+    ? 'no battery · mains'
+    : snap.battery.hasBattery
+      ? `${snap.battery.percent >= 0 ? `${Math.round(snap.battery.percent)}%` : 'level unknown'} · ${snap.battery.isCharging ? 'charging' : 'discharging'}`
+      : 'no battery · mains';
+  return (
+    <div aria-label="Device readout">
+      <div className="f-heading" style={{ marginTop: 0 }}>Device readout</div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Operating system</span>
+        <strong style={{ textAlign: 'right' }}>{snap.os} · {snap.arch}</strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Hostname · user</span>
+        <strong style={{ textAlign: 'right' }}>{snap.hostname} · {snap.user}</strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">CPU</span>
+        <strong style={{ textAlign: 'right', fontSize: 12 }}>{snap.cpuModel} ×{snap.cores}</strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Memory</span>
+        <strong style={{ textAlign: 'right' }}>
+          {usedMb.toLocaleString()} / {snap.memoryTotalMb.toLocaleString()} MB
+          <span
+            aria-label="memory bar"
+            style={{
+              display: 'block', marginTop: 4, height: 4, width: 130,
+              background: 'var(--f-line)', borderRadius: 2, overflow: 'hidden',
+              marginLeft: 'auto',
+            }}
+          >
+            <span style={{ display: 'block', height: 4, width: `${usedPct}%`, background: usedPct > 85 ? 'var(--f-warn)' : 'var(--f-acc)' }} />
+          </span>
+        </strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Power</span>
+        <strong style={{ color: 'var(--f-warn)' }}>{batteryText}</strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Uptime</span>
+        <strong>{snap.uptimeHours.toLocaleString()} h</strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Display · net ifaces</span>
+        <strong style={{ textAlign: 'right' }}>
+          {snap.displays.length > 0
+            ? snap.displays.map(d => `${d.width}×${d.height}`).join(' · ')
+            : 'unknown'}
+          {' · '}{snap.networkInterfaces} iface{snap.networkInterfaces === 1 ? '' : 's'}
+        </strong>
+      </div>
+      <div className="f-row" style={rowStyle}>
+        <span className="f-label">Runtime</span>
+        <strong style={{ textAlign: 'right' }}>electron {snap.runtime.electron} · node {snap.runtime.node}</strong>
+      </div>
+    </div>
+  );
+}
+
 export function App(): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('chat');
@@ -127,6 +218,16 @@ export function App(): React.ReactElement {
       if (!res.ok) setNotice(res.error ?? 'agreement failed');
     } catch (err) {
       setNotice(`agreement failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, []);
+
+  const onToggleCommandExecution = useCallback(async (enabled: boolean) => {
+    try {
+      const res = await window.fairy.settings.setCommandExecution(enabled);
+      if (res.config) setConfig(res.config);
+      if (!res.ok) setNotice(res.error ?? 'toggle failed');
+    } catch (err) {
+      setNotice(`toggle failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, []);
 
@@ -198,6 +299,8 @@ export function App(): React.ReactElement {
           )}
           {tab === 'status' && (
             <div>
+              <DeviceReadout />
+              <div className="f-heading">Operational status</div>
               <div className="f-row" style={rowStyle}>
                 <span className="f-label">Assistant state</span>
                 <strong style={{ color: STATE_COLORS[state] }}>{STATE_LABELS[state]}</strong>
@@ -224,14 +327,35 @@ export function App(): React.ReactElement {
                 <span className="f-label">Providers configured</span>
                 <strong>{config?.cloudProviders.length ?? 0}</strong>
               </div>
+              <div className="f-row" style={{ ...rowStyle, cursor: 'pointer' }}>
+                <label htmlFor="cmd-exec" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    id="cmd-exec"
+                    type="checkbox"
+                    checked={config?.allowCommandExecution === true}
+                    onChange={e => void onToggleCommandExecution(e.target.checked)}
+                  />
+                  <span>
+                    <strong>Controlled command execution</strong>
+                    <br />
+                    <span style={{ color: 'var(--f-muted)', fontSize: 11 }}>
+                      allowlisted diagnostics only — Fairy asks, Master arms
+                    </span>
+                  </span>
+                </label>
+                <strong style={{ color: config?.allowCommandExecution === true ? 'var(--f-warn)' : 'var(--f-muted)' }}>
+                  {config?.allowCommandExecution === true ? 'ARMED' : 'disarmed'}
+                </strong>
+              </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" className="f-btn" onClick={() => setState('paused')}>Suspend operations</button>
                 <button type="button" className="f-btn" onClick={() => setState('idle')}>Resume</button>
               </div>
               <p style={{ color: 'var(--f-muted)', fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>
-                Everything routes through your configured cloud provider under the
-                zero-additional-spend policy — Fairy does not spend money you did not
-                explicitly authorize. Suspended means suspended: nothing runs.
+                Device readout is measured live in the main process — OS, CPU, memory,
+                power, displays. Tool results are &apos;internal&apos;-scope data: they flow
+                only to providers that allow that scope, and credential-like paths are
+                withheld from the model entirely.
               </p>
             </div>
           )}

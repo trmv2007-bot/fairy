@@ -4,15 +4,28 @@ Proactive Windows desktop assistant (Electron + TS + React + SQLite + .NET 8 bro
 
 ## What works today
 
-- **Chat** — streaming conversations with your configured cloud provider through the
-  zero-additional-spend gateway; conversation lives in the main process, deltas stream
-  over the typed sandboxed bridge, and the orb reflects live state.
+- **Chat with real hands (v0.2)** — streaming conversations through the
+  zero-additional-spend gateway, now with OpenAI-compatible function calling: the
+  model can invoke device tools, the app executes them for real, and the reply is
+  grounded in measured data. Tool activity renders as live "operational readout"
+  chips in the conversation.
+- **Device tools** (`src/system/tools.ts`) — `system_info`, `power_status`,
+  `window_list` (broker EnumWindows), `fs_search`, `fs_read_text`,
+  `net_diagnostics`, `shell_open`, and `command_run`. Reads are bounded and
+  credential-like paths are withheld from the model; `command_run` is an
+  allowlisted, shell-free spawn that stays **off until Master arms it** in the
+  Status tab (journaled on every flip).
+- **Live Status HUD** — a real device readout (OS, CPU, memory with bar, power,
+  uptime, displays, runtime versions) measured in the main process via the
+  `system:snapshot` IPC, refreshed every 10 s — nothing invented.
 - **Provider management** — add/select/delete providers in the panel; API keys are
   encrypted by the OS (DPAPI on Windows) in `fairy-keys.json` and survive restarts.
   Raw keys never touch disk in plain text, in any file.
 - **Native broker** (optional) — a .NET named-pipe host exposing policy approvals,
-  path-jail resolution, egress checks and the fail-closed upgrade gate over JSON lines.
-  The app degrades gracefully when it is not running (Status tab shows offline).
+  path-jail resolution, egress checks, the fail-closed upgrade gate, and (new)
+  `window.list` real window enumeration via EnumWindows (`SysHost.cs`) over JSON
+  lines. The app degrades gracefully when it is not running (Status tab shows
+  offline, polled every 30 s).
 - **Git connector** — real local repo read operations (status/log/diff) via a
   fixed-arg-vector `execFile` (no shell), with an injectable runner for tests.
 

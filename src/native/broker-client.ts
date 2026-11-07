@@ -182,6 +182,22 @@ export class BrokerClient {
     const r = (await this.request('policy.consume', input)) as { granted?: unknown };
     return r?.granted === true;
   }
+
+  /** Enumerate visible top-level windows (broker-side EnumWindows). Throws when the broker is offline. */
+  async windowList(): Promise<{ handle: number; title: string; process: string }[]> {
+    const r = (await this.request('window.list')) as { windows?: unknown };
+    if (!Array.isArray(r?.windows)) {
+      throw new BrokerClientError('window.list returned malformed response');
+    }
+    const out: { handle: number; title: string; process: string }[] = [];
+    for (const w of r.windows) {
+      if (typeof w !== 'object' || w === null) continue;
+      const rec = w as { handle?: unknown; title?: unknown; process?: unknown };
+      if (typeof rec.title !== 'string' || typeof rec.process !== 'string') continue;
+      out.push({ handle: typeof rec.handle === 'number' ? rec.handle : 0, title: rec.title, process: rec.process });
+    }
+    return out;
+  }
 }
 
 // Re-export so embedders can reference the socket type without importing node:net.

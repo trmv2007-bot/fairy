@@ -2,6 +2,11 @@
 // is not permission to spend. Included-cost status is enforced per call.
 // The API key is resolved by the caller (main process vault / broker handle) and is
 // used for this request only — it is never part of the persisted config.
+//
+// Function calling (Fairy's hands, v0.2): OpenAI-compatible `tools` are sent when
+// supplied, tool_calls are parsed from both plain and streamed responses, and
+// assistant/tool result messages round-trip so multi-step tool loops work against
+// any compliant endpoint.
 export interface CloudProviderConfig {
   endpointId: string;
   baseUrl: string;
@@ -12,9 +17,30 @@ export interface CloudProviderConfig {
   supportsVision?: boolean;
 }
 
+/** One model-invoked tool call (OpenAI function-calling wire format). */
+export interface CloudToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/** Tool declaration sent to the provider (OpenAI function format). */
+export interface CloudToolSpec {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
 export interface CloudChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  /** Present on assistant turns that invoked tools. */
+  toolCalls?: CloudToolCall[];
+  /** Present on role:'tool' turns — matches the originating assistant tool_call id. */
+  toolCallId?: string;
 }
 
 export interface CloudCompletionUsage {
@@ -26,6 +52,8 @@ export interface CloudCompletion {
   content: string;
   model: string;
   usage?: CloudCompletionUsage;
+  /** Tool invocations the model requested (empty/absent = plain text answer). */
+  toolCalls?: CloudToolCall[];
 }
 
 export class CloudRouteError extends Error {
@@ -47,20 +75,95 @@ function joinUrl(baseUrl: string, suffix: string): string {
 
 interface ChatCompletionResponse {
   model?: string;
-  choices?: { message?: { content?: unknown } }[];
+  choices?: { message?: { content?: unknown; tool_calls?: unknown } }[];
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
 }
 
 interface StreamChunk {
   model?: string;
-  choices?: { delta?: { content?: unknown } }[];
+  choices?: { delta?: { content?: unknown; tool_calls?: unknown } }[];
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
+}
+
+// ── Function-calling wire helpers ───────────────────────────────────────────
+
+interface WireToolCall {
+  id?: unknown;
+  type?: unknown;
+  function?: { name?: unknown; arguments?: unknown };
+}
+
+/** Parse a `tool_calls` array (non-streaming shape) into CloudToolCall[]. */
+function parseToolCalls(raw: unknown): CloudToolCall[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CloudToolCall[] = [];
+  for (const tc of raw) {
+    if (typeof tc !== 'object' || tc === null) continue;
+    const w = tc as WireToolCall;
+    const name = typeof w.function?.name === 'string' ? w.function.name : '';
+    const args = typeof w.function?.arguments === 'string' ? w.function.arguments : '';
+    const id = typeof w.id === 'string' && w.id.length > 0 ? w.id : `call_${out.length}`;
+    if (name.length === 0) continue; // nameless fragment is unusable
+    out.push({ id, name, arguments: args });
+  }
+  return out;
+}
+
+/** Accumulator for streamed tool_call fragments (keyed by `index`). */
+class ToolCallAccumulator {
+  private readonly map = new Map<number, { id?: string; name?: string; args: string }>();
+
+  push(raw: unknown): void {
+    if (!Array.isArray(raw)) return;
+    for (const frag of raw) {
+      if (typeof frag !== 'object' || frag === null) continue;
+      const f = frag as { index?: unknown; id?: unknown; function?: { name?: unknown; arguments?: unknown } };
+      const idx = typeof f.index === 'number' && Number.isInteger(f.index) && f.index >= 0 ? f.index : 0;
+      let acc = this.map.get(idx);
+      if (!acc) {
+        acc = { args: '' };
+        this.map.set(idx, acc);
+      }
+      if (typeof f.id === 'string' && f.id.length > 0) acc.id = f.id;
+      if (typeof f.function?.name === 'string' && f.function.name.length > 0) acc.name = f.function.name;
+      if (typeof f.function?.arguments === 'string') acc.args += f.function.arguments;
+    }
+  }
+
+  finish(): CloudToolCall[] {
+    const out: CloudToolCall[] = [];
+    let i = 0;
+    for (const acc of [...this.map.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v)) {
+      if ((acc.name ?? '').length === 0) continue;
+      out.push({ id: acc.id ?? `call_${i}`, name: acc.name!, arguments: acc.args });
+      i++;
+    }
+    return out;
+  }
+}
+
+/** Serialize messages to the OpenAI wire shape: internal-only fields never leak. */
+function toWireMessages(messages: CloudChatMessage[]): Record<string, unknown>[] {
+  return messages.map(m => {
+    const wire: Record<string, unknown> = { role: m.role, content: m.content };
+    if (m.toolCalls !== undefined && m.toolCalls.length > 0) {
+      wire.tool_calls = m.toolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function',
+        function: { name: tc.name, arguments: tc.arguments },
+      }));
+    }
+    if (m.toolCallId !== undefined) wire.tool_call_id = m.toolCallId;
+    return wire;
+  });
 }
 
 export interface CompletionOptions {
   apiKey?: string;
   temperature?: number;
   maxTokens?: number;
+  /** When present, tools are declared and tool_choice is 'auto'. */
+  tools?: CloudToolSpec[];
 }
 
 export class CloudProvider {
@@ -108,10 +211,12 @@ export class CloudProvider {
       throw new CloudRouteError(`provider returned non-JSON response for '${this.cfg.endpointId}'`);
     }
     const content = data.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || content.length === 0) {
+    const toolCalls = parseToolCalls(data.choices?.[0]?.message?.tool_calls);
+    const contentStr = typeof content === 'string' ? content : '';
+    if (contentStr.length === 0 && toolCalls.length === 0) {
       throw new CloudRouteError(`provider response missing completion content for '${this.cfg.endpointId}'`);
     }
-    return finishCompletion(content, data.model ?? this.defaultModel(), data.usage);
+    return finishCompletion(contentStr, data.model ?? this.defaultModel(), data.usage, toolCalls);
   }
 
   /**
@@ -148,11 +253,13 @@ export class CloudProvider {
         throw new CloudRouteError(`provider returned non-JSON response for '${this.cfg.endpointId}'`);
       }
       const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== 'string' || content.length === 0) {
+      const toolCalls = parseToolCalls(data.choices?.[0]?.message?.tool_calls);
+      const contentStr = typeof content === 'string' ? content : '';
+      if (contentStr.length === 0 && toolCalls.length === 0) {
         throw new CloudRouteError(`provider response missing completion content for '${this.cfg.endpointId}'`);
       }
-      onChunk(content);
-      return finishCompletion(content, data.model ?? this.defaultModel(), data.usage);
+      if (contentStr.length > 0) onChunk(contentStr);
+      return finishCompletion(contentStr, data.model ?? this.defaultModel(), data.usage, toolCalls);
     }
 
     if (!res.body) throw new CloudRouteError(`provider returned an empty stream for '${this.cfg.endpointId}'`);
@@ -162,6 +269,7 @@ export class CloudProvider {
     let buffer = '';
     let content = '';
     let model: string | null = null;
+    const toolAcc = new ToolCallAccumulator();
     let usage: { prompt_tokens?: unknown; completion_tokens?: unknown } | undefined;
     let idleTimer: ReturnType<typeof setTimeout> | undefined;
     let timedOut = false;
@@ -196,6 +304,9 @@ export class CloudProvider {
           if (typeof chunk.model === 'string') model = chunk.model;
           if (chunk.usage) usage = chunk.usage;
           const delta = chunk.choices?.[0]?.delta?.content;
+          if (chunk.choices?.[0]?.delta?.tool_calls !== undefined) {
+            toolAcc.push(chunk.choices[0].delta.tool_calls);
+          }
           if (typeof delta === 'string' && delta.length > 0) {
             content += delta;
             if (content.length > MAX_STREAM_DELTA_LENGTH) {
@@ -213,10 +324,11 @@ export class CloudProvider {
     if (timedOut) {
       throw new CloudRouteError(`provider stream timed out (idle > ${STREAM_IDLE_TIMEOUT_MS}ms) for '${this.cfg.endpointId}'`);
     }
-    if (content.length === 0) {
+    const toolCalls = toolAcc.finish();
+    if (content.length === 0 && toolCalls.length === 0) {
       throw new CloudRouteError(`provider stream produced no content for '${this.cfg.endpointId}'`);
     }
-    return finishCompletion(content, model ?? this.defaultModel(), usage);
+    return finishCompletion(content, model ?? this.defaultModel(), usage, toolCalls);
   }
 
   private defaultModel(): string {
@@ -241,10 +353,13 @@ export class CloudProvider {
         },
         body: JSON.stringify({
           model: this.defaultModel(),
-          messages,
+          messages: toWireMessages(messages),
           temperature: opts.temperature ?? 0.2,
           max_tokens: opts.maxTokens ?? 1024,
           ...(opts.stream ? { stream: true } : {}),
+          ...(opts.tools !== undefined && opts.tools.length > 0
+            ? { tools: opts.tools, tool_choice: 'auto' }
+            : {}),
         }),
         signal: controller.signal,
       });
@@ -262,6 +377,7 @@ function finishCompletion(
   content: string,
   model: string,
   usage: { prompt_tokens?: unknown; completion_tokens?: unknown } | undefined,
+  toolCalls: CloudToolCall[] = [],
 ): CloudCompletion {
   const out: CloudCompletionUsage = {};
   if (typeof usage?.prompt_tokens === 'number') out.promptTokens = usage.prompt_tokens;
@@ -270,5 +386,6 @@ function finishCompletion(
   if (typeof usage?.prompt_tokens === 'number' || typeof usage?.completion_tokens === 'number') {
     completion.usage = out;
   }
+  if (toolCalls.length > 0) completion.toolCalls = toolCalls;
   return completion;
 }

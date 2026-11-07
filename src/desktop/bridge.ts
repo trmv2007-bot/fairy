@@ -1,6 +1,10 @@
 // Shared IPC contract between the Electron main process and the renderer.
 // Types only — imported by preload (type-only, erased at runtime) and the UI.
 // The renderer has NO Node access: everything it can do is listed here.
+import type { ToolActivityEvent } from './chat.js';
+import type { SystemSnapshot } from '../system/tools.js';
+
+export type { ToolActivityEvent, SystemSnapshot };
 
 export interface ProviderWire {
   endpointId: string;
@@ -20,6 +24,8 @@ export interface PersistedConfigWire {
   allowLocalModels: boolean;
   /** ISO timestamp of the user-agreement signing; absent until the user signs. */
   agreementAcceptedAt?: string;
+  /** Master's opt-in for the command_run tool; absent = off. */
+  allowCommandExecution?: boolean;
 }
 
 export interface SaveProviderPayload {
@@ -36,6 +42,12 @@ export interface SettingsResult {
   ok: boolean;
   error?: string;
   config?: PersistedConfigWire;
+}
+
+export interface SystemSnapshotResult {
+  ok: boolean;
+  error?: string;
+  snapshot?: SystemSnapshot;
 }
 
 // ── Chat ────────────────────────────────────────────────────────────────────
@@ -81,6 +93,8 @@ export interface FairyBridge {
     selectProvider(id: string | null): Promise<SettingsResult>;
     /** Records the user-agreement signing (idempotent; journal event + persisted timestamp). */
     acceptAgreement(): Promise<SettingsResult>;
+    /** Arms or disarms the command_run tool (journaled both ways). */
+    setCommandExecution(enabled: boolean): Promise<SettingsResult>;
   };
   chat: {
     /** Send one user turn; resolves with the final assistant message. Deltas arrive via onChunk. */
@@ -92,5 +106,11 @@ export interface FairyBridge {
     onState(cb: (e: RuntimeStateEvent) => void): () => void;
     /** Subscribe to broker online/offline transitions. Returns an unsubscribe function. */
     onBrokerState(cb: (e: BrokerStateEvent) => void): () => void;
+    /** Subscribe to live tool execution activity (drives the activity chips). */
+    onToolActivity(cb: (e: ToolActivityEvent) => void): () => void;
+  };
+  system: {
+    /** Real device readout for the Status HUD — measured in the main process. */
+    snapshot(): Promise<SystemSnapshotResult>;
   };
 }

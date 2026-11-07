@@ -96,6 +96,19 @@ public static class HostTests
         var missing = host.HandleRequest(new BrokerRequest("r11", "policy.consume", Payload("{}")));
         Assert(!missing.Ok && missing.Error!.Length > 0, "missing fields -> ok:false with error");
 
+        // window.list: real EnumWindows on Windows; graceful ok:false elsewhere
+        var wl = host.HandleRequest(new BrokerRequest("r12", "window.list", null));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert(wl.Ok && wl.Result?.TryGetProperty("windows", out _) == true,
+                "window.list enumerates real windows on Windows");
+        }
+        else
+        {
+            Assert(!wl.Ok && wl.Error!.Contains("Windows"),
+                "window.list fails closed off-Windows with a clear reason");
+        }
+
         Console.WriteLine("ALL HOST TESTS PASSED");
         return 0;
     }
