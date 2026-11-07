@@ -1,7 +1,9 @@
 // Chat history (v0.5 remodel, presentational): bubbles, tool activity log and
 // empty states. The composer moved to the panel's persistent command bar
 // (App.tsx) — state lives in the useChat controller.
-import React, { useEffect, useRef } from 'react';
+// v0.6: collapsible transcript history — search, reopen, delete. Uses an
+// <input> (not a textarea) so the shell keeps exactly one textarea contract.
+import React, { useEffect, useRef, useState } from 'react';
 import type { ChatController } from './use-chat.js';
 
 export interface ChatProps {
@@ -21,9 +23,27 @@ const IDLE_QUIPS = [
   'Good news: threats hate optimal routing. Bad news: I have already rerouted around you.',
 ];
 
+/** Deterministic timestamp (no locale drift): today shows HH:MM, older shows YYYY-MM-DD. */
+function fmtWhen(ts: number): string {
+  const d = new Date(ts);
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return sameDay
+    ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const rowStyle: React.CSSProperties = {
+  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+  border: '1px solid var(--f-line)', borderRadius: 8, padding: '6px 8px',
+};
+
 export function Chat({ chat, hasProvider, onOpenProviders }: ChatProps): React.ReactElement {
   const { messages, streaming, error, tools } = chat;
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -36,10 +56,82 @@ export function Chat({ chat, hasProvider, onOpenProviders }: ChatProps): React.R
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div className="f-heading" style={{ margin: 0 }}>Chat</div>
-        <button type="button" className="f-btn" onClick={() => void chat.clear()} disabled={streaming}>
-          Clear
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            className={historyOpen ? 'f-chip f-chip-active' : 'f-chip'}
+            aria-label="Chat history"
+            aria-pressed={historyOpen}
+            title="Archived conversations — search, reopen, delete"
+            onClick={() => setHistoryOpen(o => !o)}
+          >History</button>
+          <button type="button" className="f-btn" onClick={() => void chat.clear()} disabled={streaming}>
+            Clear
+          </button>
+        </div>
       </div>
+
+      {historyOpen && (
+        <div
+          aria-label="Archived conversations"
+          className="f-holo f-hairline"
+          style={{ borderRadius: 10, padding: 10, marginTop: 8 }}
+        >
+          <input
+            type="search"
+            className="f-input"
+            style={{ width: '100%', boxSizing: 'border-box' }}
+            aria-label="Search conversations"
+            placeholder="Search transcripts…"
+            value={query}
+            onChange={e => {
+              setQuery(e.target.value);
+              void chat.searchConversations(e.target.value);
+            }}
+          />
+          {chat.conversations.length === 0 && (
+            <p className="f-label" style={{ margin: '8px 0 0' }}>
+              {query.trim().length > 0 ? 'No transcripts match.' : 'No archived conversations yet.'}
+            </p>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, maxHeight: 180, overflowY: 'auto' }}>
+            {chat.conversations.map(c => (
+              <div
+                key={c.id}
+                className="f-row"
+                style={{
+                  ...rowStyle,
+                  marginBottom: 0,
+                  ...(c.id === chat.activeConversationId ? { borderColor: 'var(--f-acc)' } : {}),
+                }}
+              >
+                <button
+                  type="button"
+                  className="f-btn"
+                  aria-label={`Open conversation: ${c.title || 'Untitled'}`}
+                  title={`${c.messageCount} message${c.messageCount === 1 ? '' : 's'}`}
+                  onClick={() => void chat.openConversation(c.id)}
+                  style={{ flex: 1, textAlign: 'left', minWidth: 0, overflow: 'hidden' }}
+                >
+                  <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.title || 'Untitled'}
+                  </span>
+                  <span style={{ color: 'var(--f-muted)', fontSize: 11 }}>
+                    {fmtWhen(c.updatedAt)} · {c.messageCount} msg
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="f-btn"
+                  aria-label={`Delete conversation: ${c.title || 'Untitled'}`}
+                  onClick={() => void chat.deleteConversation(c.id)}
+                  style={{ color: 'var(--f-danger)', borderColor: 'var(--f-line)', padding: '2px 8px' }}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div
         style={{

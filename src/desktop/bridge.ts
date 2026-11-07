@@ -78,6 +78,29 @@ export interface ChatMessageWire {
   content: string;
 }
 
+// ── Conversation transcripts (v0.6) ────────────────────────────────────────
+
+export interface ConversationWire {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messageCount: number;
+}
+
+export interface ConversationListResult {
+  ok: boolean;
+  error?: string;
+  conversations?: ConversationWire[];
+}
+
+export interface ConversationOpenResult {
+  ok: boolean;
+  error?: string;
+  /** Active conversation id after the open ('' when the store is empty). */
+  id?: string;
+  messages?: ChatMessageWire[];
+}
+
 export interface ChatChunkEvent {
   messageId: string;
   delta: string;
@@ -97,6 +120,8 @@ export interface ChatSendResult {
   /** Final assistant message (absent on error). */
   message?: ChatMessageWire;
   model?: string;
+  /** Transcript the exchange landed in (v0.6) — '' when persistence is off. */
+  conversationId?: string;
 }
 
 export interface SimpleResult {
@@ -123,7 +148,16 @@ export interface FairyBridge {
   chat: {
     /** Send one user turn; resolves with the final assistant message. Deltas arrive via onChunk. */
     send(text: string): Promise<ChatSendResult>;
+    /** Archives the live conversation and starts fresh — nothing durable is deleted. */
     clear(): Promise<SimpleResult>;
+    /** Durable conversation list, newest first. */
+    history(limit?: number): Promise<ConversationListResult>;
+    /** Search conversations by title or content substring. */
+    search(query: string): Promise<ConversationListResult>;
+    /** Switch to a conversation (null = most recent) and return its display turns. */
+    open(id: string | null): Promise<ConversationOpenResult>;
+    /** Permanently delete one transcript. */
+    deleteConversation(id: string): Promise<SimpleResult>;
     /** Subscribe to streaming deltas. Returns an unsubscribe function. */
     onChunk(cb: (e: ChatChunkEvent) => void): () => void;
     /** Subscribe to runtime state transitions (drives the orb). Returns an unsubscribe function. */

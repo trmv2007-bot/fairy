@@ -35,6 +35,10 @@ const bridge: FairyBridge = {
   chat: {
     send: (text: string) => ipcRenderer.invoke('chat:send', text),
     clear: () => ipcRenderer.invoke('chat:clear'),
+    history: (limit?: number) => ipcRenderer.invoke('chat:history', limit),
+    search: (query: string) => ipcRenderer.invoke('chat:search', query),
+    open: (id: string | null) => ipcRenderer.invoke('chat:open', id),
+    deleteConversation: (id: string) => ipcRenderer.invoke('chat:delete', id),
     onChunk: (cb: (e: ChatChunkEvent) => void) => subscribe<ChatChunkEvent>('chat:chunk', cb),
     onState: (cb: (e: RuntimeStateEvent) => void) => subscribe<RuntimeStateEvent>('runtime:state', cb),
     onBrokerState: (cb: (e: BrokerStateEvent) => void) => subscribe<BrokerStateEvent>('broker:state', cb),

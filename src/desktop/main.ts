@@ -14,6 +14,8 @@ import * as os from 'node:os';
 import { SettingsStore } from '../storage/settings.js';
 import { openDatabase } from '../storage/database.js';
 import { EventJournalImpl } from '../storage/journal.js';
+import { ConversationStore } from '../storage/transcripts.js';
+import type { DatabaseHandle } from '../storage/database.js';
 import { loadConfig, sanitizeProvider, effectivePool } from '../providers/config.js';
 import { SecretVault } from '../providers/secret-vault.js';
 import { PersistedKeyStore, type KeyCodec } from '../providers/persisted-key-store.js';
@@ -127,10 +129,14 @@ const keyCodec: KeyCodec = {
 };
 const keyStore = new PersistedKeyStore(path.join(app.getPath('userData'), 'fairy-keys.json'), keyCodec);
 
-// Journal (best effort): chat + lifecycle events land in SQLite when available.
+// Journal + transcripts (best effort): chat history and lifecycle events land
+// in SQLite when available; chat itself works without the database.
 let journal: EventJournalImpl | null = null;
+let transcripts: ConversationStore | null = null;
 try {
-  journal = new EventJournalImpl(openDatabase(path.join(app.getPath('userData'), 'fairy.db')));
+  const db: DatabaseHandle = openDatabase(path.join(app.getPath('userData'), 'fairy.db'));
+  journal = new EventJournalImpl(db);
+  transcripts = new ConversationStore(db);
 } catch (err) {
   console.error('[fairy] journal unavailable (chat still works):', err);
 }
@@ -271,6 +277,7 @@ const chatService = new ChatService(
     registry: toolRegistry,
     allowCommandExecution: () => settingsStore.load().allowCommandExecution === true,
   },
+  transcripts,
 );
 
 // ── Broker (optional native component) ──────────────────────────────────────
@@ -529,12 +536,17 @@ ipcMain.handle('settings:poolStatus', (): { ok: boolean; status?: PoolStatusWire
 });
 
 // ── Chat IPC ────────────────────────────────────────────────────────────────
-ipcMain.handle('chat:send', async (_event, raw: unknown): Promise<{ ok: boolean; error?: string; message?: { id: string; role: 'assistant'; content: string }; model?: string }> => {
+ipcMain.handle('chat:send', async (_event, raw: unknown): Promise<{ ok: boolean; error?: string; message?: { id: string; role: 'assistant'; content: string }; model?: string; conversationId?: string }> => {
   if (typeof raw !== 'string') return { ok: false, error: 'invalid message payload' };
   if (chatService.isRunning) return { ok: false, error: 'a request is already in flight' };
   try {
     const result = await chatService.send(raw);
-    return { ok: true, message: { id: result.messageId, role: 'assistant', content: result.content }, model: result.model };
+    return {
+      ok: true,
+      message: { id: result.messageId, role: 'assistant', content: result.content },
+      model: result.model,
+      ...(chatService.activeConversation !== null ? { conversationId: chatService.activeConversation } : {}),
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -543,6 +555,51 @@ ipcMain.handle('chat:send', async (_event, raw: unknown): Promise<{ ok: boolean;
 ipcMain.handle('chat:clear', (): { ok: boolean; error?: string } => {
   try {
     chatService.clear();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// ── Conversation transcripts (v0.6) ────────────────────────────────────────
+ipcMain.handle('chat:history', (_event, raw: unknown) => {
+  const limit = typeof raw === 'number' && Number.isFinite(raw) ? Math.floor(raw) : 50;
+  try {
+    return { ok: true, conversations: chatService.listConversations(limit) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('chat:search', (_event, raw: unknown) => {
+  if (typeof raw !== 'string') return { ok: false, error: 'invalid search payload' };
+  if (raw.length > 200) return { ok: false, error: 'search query too long (max 200 chars)' };
+  try {
+    return { ok: true, conversations: chatService.searchConversations(raw) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('chat:open', (_event, raw: unknown) => {
+  if (raw !== null && typeof raw !== 'string') return { ok: false, error: 'invalid conversation id' };
+  if (typeof raw === 'string' && (raw.length === 0 || raw.length > 80)) {
+    return { ok: false, error: 'invalid conversation id' };
+  }
+  try {
+    const opened = chatService.openConversation(raw);
+    return { ok: true, ...opened };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('chat:delete', (_event, raw: unknown): { ok: boolean; error?: string } => {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > 80) {
+    return { ok: false, error: 'invalid conversation id' };
+  }
+  try {
+    chatService.deleteConversation(raw);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -659,6 +716,9 @@ if (!gotLock) {
       if (restored > 0) console.log(`[fairy] restored ${restored} key(s) from OS-encrypted storage`);
       seedProviderFromEnv();
       rebuildGateway();
+      // Resume where Master left off (v0.6): the latest transcript is back in
+      // the live conversation before the window ever paints.
+      if (chatService.resumeLatest()) console.log('[fairy] resumed the latest conversation');
     } catch (err) {
       // A bad seed must never take down startup — the user can configure via UI.
       console.error('[fairy] provider seeding failed:', err);

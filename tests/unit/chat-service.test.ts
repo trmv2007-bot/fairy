@@ -5,6 +5,7 @@ import { CloudRouteError } from '../../src/providers/cloud.js';
 import type { CloudChatMessage, CloudCompletion } from '../../src/providers/cloud.js';
 import { openInMemoryDatabase } from '../../src/storage/database.js';
 import { EventJournalImpl } from '../../src/storage/journal.js';
+import { ConversationStore } from '../../src/storage/transcripts.js';
 
 function fakeGateway(chatImpl: (messages: CloudChatMessage[], onChunk?: (d: string) => void) => Promise<CloudCompletion>): ModelGateway {
   return {
@@ -96,5 +97,113 @@ describe('ChatService', () => {
     await svc.send('x');
     svc.clear();
     expect(journalEvents(j).map(e => e.type)).toContain('chat.cleared');
+  });
+
+  // ── Transcripts (v0.6) ──────────────────────────────────────────────────
+  it('persists turns to the conversation store as they enter history', async () => {
+    const gw = fakeGateway(async (_m, onChunk) => {
+      onChunk?.('Hi');
+      return { content: 'Hi, Master.', model: 'm' };
+    });
+    const store = new ConversationStore(openInMemoryDatabase());
+    const svc = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, store);
+    await svc.send('good evening');
+    const convs = store.listConversations();
+    expect(convs).toHaveLength(1);
+    expect(convs[0]?.title).toBe('good evening');
+    expect(convs[0]?.messageCount).toBe(2);
+    const turns = store.getTurns(convs[0]!.id);
+    expect(turns.map(t => t.role)).toEqual(['user', 'assistant']);
+    expect(turns[1]?.content).toBe('Hi, Master.');
+  });
+
+  it('clear() archives: the transcript survives and the next send starts a new one', async () => {
+    const gw = fakeGateway(async () => ({ content: 'ok', model: 'm' }));
+    const store = new ConversationStore(openInMemoryDatabase());
+    const svc = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, store);
+    await svc.send('first conversation');
+    const firstId = svc.activeConversation;
+    svc.clear();
+    expect(svc.historySnapshot()).toEqual([]);
+    await svc.send('second conversation');
+    expect(store.listConversations()).toHaveLength(2);
+    expect(svc.activeConversation).not.toBe(firstId);
+    const turns = store.getTurns(firstId!);
+    expect(turns.map(t => t.content)).toEqual(['first conversation', 'ok']);
+  });
+
+  it('openConversation restores full context (incl. tool turns) into memory', async () => {
+    const store = new ConversationStore(openInMemoryDatabase());
+    const conv = store.createConversation('restored');
+    store.appendTurn(conv.id, { role: 'user', content: 'check power' });
+    store.appendTurn(conv.id, { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'power_status', arguments: '{}' }] });
+    store.appendTurn(conv.id, { role: 'tool', content: '{"ok":true}', toolCallId: 'c1' });
+    store.appendTurn(conv.id, { role: 'assistant', content: '88%.' });
+
+    const gw = fakeGateway(async (messages) => {
+      // The model must see the restored context, tool turns included.
+      expect(messages.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'user']);
+      return { content: 'continued', model: 'm' };
+    });
+    const svc = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, store);
+    const opened = await (async () => {
+      const res = svc.openConversation(conv.id);
+      expect(res.messages.map(m => m.role)).toEqual(['user', 'assistant', 'assistant']); // tool turns hidden from display
+      expect(res.messages.map(m => m.content)).toEqual(['check power', '', '88%.']);
+      return res;
+    })();
+    expect(opened.id).toBe(conv.id);
+    await svc.send('and now?');
+    expect(svc.historySnapshot().map(t => t.role)).toEqual(['user', 'assistant', 'tool', 'assistant', 'user', 'assistant']);
+  });
+
+  it('resumeLatest() loads the most recent transcript at boot', async () => {
+    const gw = fakeGateway(async () => ({ content: 'ok', model: 'm' }));
+    const store = new ConversationStore(openInMemoryDatabase());
+    const svc = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, store);
+    await svc.send('older one');
+    svc.clear();
+    await svc.send('the latest one');
+
+    const svc2 = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, store);
+    expect(svc2.resumeLatest()).toBe(true);
+    expect(svc2.historySnapshot().map(t => t.content)).toEqual(['the latest one', 'ok']);
+    const fresh = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, store);
+    fresh.clear(); // archive the latest
+    expect(new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, store).resumeLatest()).toBe(true);
+  });
+
+  it('resumeLatest() returns false on an empty store; chat works without a store', async () => {
+    const gw = fakeGateway(async () => ({ content: 'ok', model: 'm' }));
+    const noStore = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} });
+    expect(noStore.resumeLatest()).toBe(false);
+    expect(noStore.listConversations()).toEqual([]);
+    await noStore.send('still works');
+    expect(noStore.historySnapshot().map(t => t.role)).toEqual(['user', 'assistant']);
+
+    const emptyStore = new ChatService(() => gw, null, { onChunk: () => {}, onState: () => {} }, null, new ConversationStore(openInMemoryDatabase()));
+    expect(emptyStore.resumeLatest()).toBe(false);
+    await emptyStore.send('also works');
+  });
+
+  it('deleteConversation removes the transcript and clears live memory when active', async () => {
+    const gw = fakeGateway(async () => ({ content: 'ok', model: 'm' }));
+    const store = new ConversationStore(openInMemoryDatabase());
+    const j = new EventJournalImpl(openInMemoryDatabase());
+    const svc = new ChatService(() => gw, j, { onChunk: () => {}, onState: () => {} }, null, store);
+    await svc.send('doomed');
+    const id = svc.activeConversation!;
+    svc.deleteConversation(id);
+    expect(store.hasConversation(id)).toBe(false);
+    expect(svc.historySnapshot()).toEqual([]);
+    expect(svc.activeConversation).toBeNull();
+    expect(journalEvents(j).map(e => e.type)).toContain('chat.conversation-deleted');
+    // non-active delete leaves memory untouched
+    await svc.send('kept');
+    const other = store.createConversation('other');
+    store.appendTurn(other.id, { role: 'user', content: 'x' });
+    const before = svc.historySnapshot().length;
+    svc.deleteConversation(other.id);
+    expect(svc.historySnapshot().length).toBe(before);
   });
 });

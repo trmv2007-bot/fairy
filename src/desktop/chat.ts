@@ -14,6 +14,7 @@ import { CloudRouteError } from '../providers/cloud.js';
 import type { CloudChatMessage, CloudToolCall } from '../providers/cloud.js';
 import type { ModelGateway } from '../providers/gateway.js';
 import type { EventJournalImpl } from '../storage/journal.js';
+import type { ConversationStore, ConversationSummary } from '../storage/transcripts.js';
 import type { ToolRegistry } from '../system/tools.js';
 
 export type RuntimeState = 'idle' | 'thinking' | 'working' | 'error' | 'paused';
@@ -82,12 +83,16 @@ const CHAT_DATA_SCOPES = ['public', 'internal'];
 export class ChatService {
   private history: ChatTurn[] = [];
   private running = false;
+  /** Active transcript (v0.6); null until the first turn of a fresh conversation. */
+  private activeConversationId: string | null = null;
 
   constructor(
     private readonly gatewayProvider: () => ModelGateway | null,
     private readonly journal: EventJournalImpl | null,
     private readonly hooks: ChatHooks,
     private readonly tools: ChatTools | null = null,
+    /** Durable transcripts (v0.6) — optional; chat works without a database. */
+    private readonly store: ConversationStore | null = null,
   ) {}
 
   get isRunning(): boolean {
@@ -101,6 +106,9 @@ export class ChatService {
   clear(): void {
     if (this.running) throw new Error('cannot clear while a request is in flight');
     this.history = [];
+    // "Clear" archives: the transcript stays in history, the next send starts
+    // a fresh conversation. Nothing durable is deleted by a misclick.
+    this.activeConversationId = null;
     this.journal?.append({ type: 'chat.cleared', payload: null, acknowledged: false });
   }
 
@@ -121,6 +129,8 @@ export class ChatService {
     const messageId = 'msg_' + randomUUID();
     this.history.push({ role: 'user', content: text });
     this.running = true;
+    this.ensureConversation();
+    this.persist({ role: 'user', content: text });
     this.setState('thinking');
     let sawActivity = false;
     const markWorking = (): void => {
@@ -160,6 +170,7 @@ export class ChatService {
           content: completion.content,
           ...(calls.length > 0 ? { toolCalls: calls } : {}),
         });
+        this.persist({ role: 'assistant', content: completion.content, ...(calls.length > 0 ? { toolCalls: calls } : {}) });
 
         for (const call of calls) {
           const spec = this.tools.registry.specs().find(s => s.name === call.name);
@@ -190,6 +201,7 @@ export class ChatService {
           });
           baseMessages.push({ role: 'tool', content: exec.json, toolCallId: call.id });
           this.history.push({ role: 'tool', content: exec.json, toolCallId: call.id });
+          this.persist({ role: 'tool', content: exec.json, toolCallId: call.id });
         }
 
         // Last round is sent without tools — the model must now answer in text.
@@ -203,6 +215,7 @@ export class ChatService {
         throw new Error('provider returned tool calls only and no final answer — try rephrasing');
       }
       this.history.push({ role: 'assistant', content });
+      this.persist({ role: 'assistant', content });
       this.journal?.append({
         type: 'chat.assistant',
         payload: { messageId, length: content.length, model: completion.model },
@@ -239,5 +252,89 @@ export class ChatService {
 
   private setState(state: RuntimeState): void {
     this.hooks.onState(state);
+  }
+
+  // ── Transcripts (v0.6) ────────────────────────────────────────────────────
+  // Persistence never kills chat: a store failure is logged and skipped, the
+  // in-memory conversation continues.
+  private ensureConversation(): void {
+    if (!this.store || this.activeConversationId !== null) return;
+    try {
+      this.activeConversationId = this.store.createConversation().id;
+    } catch (err) {
+      console.error('[fairy] transcript create failed:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private persist(turn: Omit<ChatTurn, 'id'>): void {
+    if (!this.store || this.activeConversationId === null) return;
+    try {
+      this.store.appendTurn(this.activeConversationId, turn);
+    } catch (err) {
+      console.error('[fairy] transcript append failed:', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  get activeConversation(): string | null {
+    return this.activeConversationId;
+  }
+
+  /** Switch to a conversation (null = latest). Returns its display turns. */
+  openConversation(id: string | null): { id: string; messages: { id: string; role: 'user' | 'assistant'; content: string }[] } {
+    if (this.running) throw new Error('cannot switch conversations while a request is in flight');
+    if (!this.store) return { id: '', messages: [] };
+    const target = id ?? this.store.latestConversationId();
+    if (!target) return { id: '', messages: [] };
+    if (!this.store.hasConversation(target)) throw new Error(`unknown conversation '${target}'`);
+    const turns = this.store.getTurns(target);
+    // Full context (incl. tool turns) restores exactly — the model sees what
+    // it saw before; the UI only displays user/assistant bubbles.
+    this.history = turns.map(t => ({
+      role: t.role,
+      content: t.content,
+      ...(t.toolCalls !== undefined ? { toolCalls: t.toolCalls } : {}),
+      ...(t.toolCallId !== undefined ? { toolCallId: t.toolCallId } : {}),
+    }));
+    this.activeConversationId = target;
+    return {
+      id: target,
+      messages: turns
+        .filter(t => t.role !== 'tool')
+        .map(t => ({ id: t.id, role: t.role === 'user' ? 'user' as const : 'assistant' as const, content: t.content })),
+    };
+  }
+
+  /** Boot-time resume: load the most recent transcript into memory. */
+  resumeLatest(): boolean {
+    if (!this.store) return false;
+    const id = this.store.latestConversationId();
+    if (!id) return false;
+    try {
+      this.openConversation(id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  listConversations(limit = 50): ConversationSummary[] {
+    if (!this.store) return [];
+    try { return this.store.listConversations(limit); } catch { return []; }
+  }
+
+  searchConversations(query: string, limit = 50): ConversationSummary[] {
+    if (!this.store) return [];
+    try { return this.store.searchConversations(query, limit); } catch { return []; }
+  }
+
+  /** Deleting the active conversation also clears live memory (it is gone). */
+  deleteConversation(id: string): void {
+    if (!this.store) return;
+    this.store.deleteConversation(id);
+    if (id === this.activeConversationId) {
+      this.history = [];
+      this.activeConversationId = null;
+      this.journal?.append({ type: 'chat.conversation-deleted', payload: { id }, acknowledged: true });
+    }
   }
 }

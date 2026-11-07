@@ -3,8 +3,10 @@
 // of the panel while the history renders in a collapsible section below it.
 // Pure glue over the typed bridge — all routing/streaming logic stays in the
 // main process.
+// v0.6: durable transcripts — resumes the latest conversation on mount and
+// exposes the archived-conversation list (search / open / delete).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatMessageWire, ToolActivityEvent } from '../bridge.js';
+import type { ChatMessageWire, ConversationWire, ToolActivityEvent } from '../bridge.js';
 
 export interface ToolChip {
   key: number;
@@ -20,10 +22,22 @@ export interface ChatController {
   streaming: boolean;
   error: string | null;
   tools: ToolChip[];
+  /** Durable conversations, newest first (v0.6). */
+  conversations: ConversationWire[];
+  /** Transcript the visible messages belong to ('' = ephemeral / none). */
+  activeConversationId: string;
   /** Sends one user message; streams the reply through the controller state. */
   send(text: string): Promise<void>;
-  /** Clears history + tool log (main process state too). */
+  /** Archives the live conversation and starts fresh (nothing durable deleted). */
   clear(): Promise<void>;
+  /** Reload the conversation list. */
+  refreshConversations(): Promise<void>;
+  /** Load a transcript into the live view (null = most recent). */
+  openConversation(id: string | null): Promise<void>;
+  /** Search archived conversations (empty query = full list). */
+  searchConversations(query: string): Promise<void>;
+  /** Permanently delete one transcript. */
+  deleteConversation(id: string): Promise<void>;
 }
 
 export function useChat(): ChatController {
@@ -31,13 +45,33 @@ export function useChat(): ChatController {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tools, setTools] = useState<ToolChip[]>([]);
+  const [conversations, setConversations] = useState<ConversationWire[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState('');
   const streamingRef = useRef(false);
   streamingRef.current = streaming;
 
-  useEffect(() => {
-    // no subscriptions at hook level: send() subscribes per turn, as before
-    return () => { /* stream unsubscribes are per-turn */ };
+  const refreshConversations = useCallback(async () => {
+    try {
+      const res = await window.fairy.chat.history();
+      if (res.ok && res.conversations) setConversations(res.conversations);
+    } catch { /* list stays stale; chat still works */ }
   }, []);
+
+  useEffect(() => {
+    // Resume where Master left off: the latest transcript re-enters the live
+    // view on mount (the main process already resumed its model context).
+    let alive = true;
+    window.fairy.chat.open(null).then(res => {
+      if (!alive) return;
+      if (res.ok && res.messages && res.messages.length > 0) {
+        setMessages(res.messages);
+        setActiveConversationId(res.id ?? '');
+      }
+    }).catch(() => { /* first run — nothing to resume */ }).finally(() => {
+      if (alive) void refreshConversations();
+    });
+    return () => { alive = false; };
+  }, [refreshConversations]);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -93,6 +127,8 @@ export function useChat(): ChatController {
           next[idx] = res.message!;
           return next;
         });
+        if (res.conversationId) setActiveConversationId(res.conversationId);
+        void refreshConversations();
       } else if (!res.ok) {
         setError(res.error ?? 'send failed');
       }
@@ -104,15 +140,67 @@ export function useChat(): ChatController {
       setStreaming(false);
       streamingRef.current = false;
     }
-  }, []);
+  }, [refreshConversations]);
 
   const clear = useCallback(async () => {
     const res = await window.fairy.chat.clear();
     if (res.ok) {
       setMessages([]);
       setTools([]);
+      setActiveConversationId('');
+      void refreshConversations();
     } else setError(res.error ?? 'clear failed');
-  }, []);
+  }, [refreshConversations]);
 
-  return { messages, streaming, error, tools, send, clear };
+  const openConversation = useCallback(async (id: string | null) => {
+    try {
+      const res = await window.fairy.chat.open(id);
+      if (res.ok) {
+        setMessages(res.messages ?? []);
+        setTools([]);
+        setError(null);
+        setActiveConversationId(res.id ?? '');
+        void refreshConversations();
+      } else setError(res.error ?? 'open failed');
+    } catch (err) {
+      setError(`open failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [refreshConversations]);
+
+  const searchConversations = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (q.length === 0) {
+      await refreshConversations();
+      return;
+    }
+    try {
+      const res = await window.fairy.chat.search(q);
+      if (res.ok && res.conversations) setConversations(res.conversations);
+      else setError(res.error ?? 'search failed');
+    } catch (err) {
+      setError(`search failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [refreshConversations]);
+
+  const deleteConversation = useCallback(async (id: string) => {
+    try {
+      const res = await window.fairy.chat.deleteConversation(id);
+      if (res.ok) {
+        if (id === activeConversationId) {
+          // The main process dropped it too — the view goes blank, not stale.
+          setMessages([]);
+          setActiveConversationId('');
+        }
+        void refreshConversations();
+      } else setError(res.error ?? 'delete failed');
+    } catch (err) {
+      setError(`delete failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [activeConversationId, refreshConversations]);
+
+  return {
+    messages, streaming, error, tools, send, clear,
+    conversations, activeConversationId,
+    refreshConversations, openConversation, searchConversations, deleteConversation,
+  };
 }
