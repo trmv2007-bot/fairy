@@ -179,6 +179,8 @@ The runtime SYSTEM_PROMPT distills §4 and the tool layer (§3a):
 
 | Canon element | App implementation |
 | --- | --- |
+| Prologue power-on: the drive from the strongbox boots, then Fairy activates and demands the agreement | `Boot.tsx` power-on ritual on every window load: deterministic CRT scan readout → eye-mandala awakening → wordmark → activation line ("…wait for the 'opportunity'"); auto-dismisses, skippable, honors `prefers-reduced-motion` |
+| The eye emblem at every scale | `EyeMark` extracted from `Orb.tsx` — one mandala renders as the 62px widget eye and the 120px boot emblem |
 | Dot-matrix pixel face on a dark screen | **Corrected**: canon is the blue eye-mandala emblem — `Orb.tsx` renders concentric SVG rings (segmented mandala + iris + pupil); pupil blinks, races while busy, hue tracks state |
 | She compels a user agreement before assisting | First-run `AgreementOverlay` (App.tsx): canon terms incl. the "opportunity" clause; Decline → *"Negative. The agreement is not optional."* once, then only Sign |
 | "According to the user agreement you signed…" | Verbatim quote on the agreement screen; signing persists `agreementAcceptedAt` in config + `fairy:agreement-signed` journal event |
@@ -188,7 +190,7 @@ The runtime SYSTEM_PROMPT distills §4 and the tool layer (§3a):
 | Electricity-bill running gag | Status tab "Power draw: 24/7 · the bill is Master's" + idle quip "only charges electricity" |
 | Official idle dialogue | Daily-rotating `IDLE_QUIPS` in Chat.tsx, adapted from verbatim wiki lines |
 | Type-III designation | Panel tagline "Type-III general-purpose intelligence · Chief Assistant" |
-| Master / Second Assistant | SYSTEM_PROMPT addressing rules |
+| Master / Second Assistant | SYSTEM_PROMPT addressing rules; the user's chat bubbles are tagged "Master" (canon EN addressing) |
 | ~80% device access (in *this* world: her host machine) | v0.2 tool layer — function-calling loop in `chat.ts` + `ToolRegistry` (§3a); tool activity chips render her live "operational readout" in Chat |
 | Power draw / battery, for real | Status HUD "Device readout": measured OS/CPU/memory/power/displays/uptime via `system:snapshot` IPC, refreshed every 10 s |
 | "Fairy asks, Master authorizes" | `command_run` stays **disarmed** until Master ticks "Controlled command execution" (Status tab); every flip is journalled (`settings.command-execution`) |

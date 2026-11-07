@@ -23,6 +23,52 @@ export const STATE_LABELS: Record<OrbState, string> = {
   error: 'malfunction',
 };
 
+export interface EyeMarkProps {
+  /** Rendered pixel size (square viewBox, scales cleanly). */
+  size?: number;
+  /** State hue — any CSS color. */
+  color: string;
+  /** Pupil races while busy. */
+  busy?: boolean;
+  /** Unique SVG gradient id (Orb passes its state so tests can key on it). */
+  gradId: string;
+}
+
+/**
+ * Canon Fairy emblem (official key visual): a BLUE concentric eye-mandala on a
+ * dark navy CRT — segmented outer ring, iris ring, glowing pupil (Youkai gets
+ * the red one). Shared by the Orb widget and the boot sequence so the emblem
+ * is identical at every scale.
+ */
+export function EyeMark({ size = 62, color, busy = false, gradId }: EyeMarkProps): React.ReactElement {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <radialGradient id={gradId} cx="50%" cy="42%" r="60%">
+          <stop offset="0%" stopColor="#eaf2ff" stopOpacity="0.95" />
+          <stop offset="55%" stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#04060e" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      {/* segmented outer mandala ring */}
+      <circle cx="24" cy="24" r="20" fill="none" stroke={color} strokeWidth="2.2" strokeDasharray="5.5 4" opacity="0.95" />
+      {/* mandala notches */}
+      <circle cx="24" cy="24" r="15.5" fill="none" stroke={color} strokeWidth="1.2" strokeDasharray="2.5 6" opacity="0.6" />
+      {/* iris */}
+      <circle cx="24" cy="24" r="10" fill={`url(#${gradId})`} stroke={color} strokeWidth="1.4" opacity="0.9" />
+      {/* pupil: blinks (races while busy) */}
+      <circle
+        cx="24"
+        cy="24"
+        r="3.6"
+        className={busy ? 'f-pupil f-pupil-fast' : 'f-pupil'}
+        fill={color}
+        style={{ filter: `drop-shadow(0 0 6px ${color})` }}
+      />
+    </svg>
+  );
+}
+
 export interface OrbProps {
   state: OrbState;
   label?: string;
@@ -30,15 +76,12 @@ export interface OrbProps {
 }
 
 /**
- * Canon Fairy emblem (official key visual): a BLUE concentric eye-mandala on a
- * dark navy CRT — segmented outer ring, iris ring, glowing pupil (Youkai gets
- * the red one). The pupil blinks and races while busy; hue tracks state.
- * aria-label contract ("Fairy orb: <state>") is kept for tests + a11y.
+ * The desktop-widget eye. The pupil blinks and races while busy; hue tracks
+ * state. aria-label contract ("Fairy orb: <state>") is kept for tests + a11y.
  */
 export function Orb({ state, label, onClick }: OrbProps): React.ReactElement {
   const c = COLORS[state];
   const busy = state === 'thinking' || state === 'working';
-  const gradId = `f-iris-${state}`;
   return (
     <button
       type="button"
@@ -61,30 +104,7 @@ export function Orb({ state, label, onClick }: OrbProps): React.ReactElement {
         boxShadow: `0 0 16px ${c}44, inset 0 0 14px ${c}22`,
       }}
     >
-      <svg width="62" height="62" viewBox="0 0 48 48" aria-hidden="true">
-        <defs>
-          <radialGradient id={gradId} cx="50%" cy="42%" r="60%">
-            <stop offset="0%" stopColor="#eaf2ff" stopOpacity="0.95" />
-            <stop offset="55%" stopColor={c} stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#04060e" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        {/* segmented outer mandala ring */}
-        <circle cx="24" cy="24" r="20" fill="none" stroke={c} strokeWidth="2.2" strokeDasharray="5.5 4" opacity="0.95" />
-        {/* mandala notches */}
-        <circle cx="24" cy="24" r="15.5" fill="none" stroke={c} strokeWidth="1.2" strokeDasharray="2.5 6" opacity="0.6" />
-        {/* iris */}
-        <circle cx="24" cy="24" r="10" fill={`url(#${gradId})`} stroke={c} strokeWidth="1.4" opacity="0.9" />
-        {/* pupil: blinks (races while busy) */}
-        <circle
-          cx="24"
-          cy="24"
-          r="3.6"
-          className={busy ? 'f-pupil f-pupil-fast' : 'f-pupil'}
-          fill={c}
-          style={{ filter: `drop-shadow(0 0 6px ${c})` }}
-        />
-      </svg>
+      <EyeMark color={c} busy={busy} gradId={`f-iris-${state}`} />
     </button>
   );
 }

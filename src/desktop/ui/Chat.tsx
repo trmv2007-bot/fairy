@@ -210,7 +210,7 @@ export function Chat({ hasProvider, onOpenProviders, brokerOnline }: ChatProps):
         )}
         {messages.map(m => (
           <div key={m.id} style={m.role === 'user' ? rowSelf : rowOther}>
-            <div style={bubbleTag}>{m.role === 'user' ? 'Operator' : 'Fairy'}</div>
+            <div style={bubbleTag}>{m.role === 'user' ? 'Master' : 'Fairy'}</div>
             {m.content}
           </div>
         ))}

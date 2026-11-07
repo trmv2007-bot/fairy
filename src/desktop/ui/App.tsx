@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Orb, STATE_LABELS } from './Orb.js';
 import { Panel } from './Panel.js';
 import { Chat } from './Chat.js';
+import { Boot } from './Boot.js';
 import { SettingsPanel } from '../settings-ui.js';
 import type { PersistedConfigWire, SaveProviderPayload, SystemSnapshot } from '../bridge.js';
 
@@ -186,6 +187,7 @@ export function App(): React.ReactElement {
   const [state, setState] = useState<OrbState>('idle');
   const [config, setConfig] = useState<PersistedConfigWire | null>(null);
   const [booted, setBooted] = useState(false);
+  const [poweredOn, setPoweredOn] = useState(false);
   const [brokerOnline, setBrokerOnline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -267,6 +269,11 @@ export function App(): React.ReactElement {
 
   return (
     <div className="hud-corners" style={{ padding: 18, minHeight: '100vh', boxSizing: 'border-box' }}>
+      {/* Canon power-on ritual: CRT scan readout -> the eye wakes -> Fairy
+          introduces herself. Plays on every window load; auto-dismisses. */}
+      {!poweredOn && (
+        <Boot agreementSigned={agreementSigned} onDone={() => setPoweredOn(true)} />
+      )}
       {booted && !agreementSigned && <AgreementOverlay onSign={() => void onSignAgreement()} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <Orb state={state} onClick={() => setOpen(true)} />
