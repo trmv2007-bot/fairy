@@ -555,7 +555,29 @@ function seedProviderFromEnv(): void {
   const apiKey = process.env.FAIRY_SEED_PROVIDER_API_KEY;
   if (!endpointId || !baseUrl || !apiKey) return;
   const cfg = settingsStore.load();
-  if (cfg.cloudProviders.some(c => c.endpointId === endpointId)) return;
+  const existing = cfg.cloudProviders.find(c => c.endpointId === endpointId);
+  if (existing) {
+    // Provider already registered (persistent profile): refresh the vaulted key
+    // when the session vault lost it (restart on a machine without OS key
+    // storage) or the key rotated in .env. Config only changes when the entry
+    // had no handle at all (registered keyless).
+    const handle = existing.authHandle;
+    if (handle !== '' && vault.resolve(handle) === apiKey) return;
+    const nextHandle = handle !== '' ? handle : 'cred_' + randomUUID();
+    vault.store(nextHandle, apiKey);
+    try {
+      keyStore.setKey(nextHandle, apiKey);
+      keyStore.flush();
+    } catch (err) {
+      console.error('[fairy] seeded key stays session-only:', err instanceof Error ? err.message : err);
+    }
+    if (nextHandle !== handle) {
+      existing.authHandle = nextHandle;
+      settingsStore.save(cfg);
+    }
+    console.log(`[fairy] re-vaulted seeded key for '${endpointId}'`);
+    return;
+  }
   const handle = 'cred_' + randomUUID();
   vault.store(handle, apiKey);
   try {

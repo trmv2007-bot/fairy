@@ -108,7 +108,17 @@ Copy `.env.example` to `.env` for optional first-run seeding and the dev URL.
 Providers are added in the app's **Providers** panel; the API key is encrypted by
 the OS and persisted so it survives restarts — the on-disk config keeps opaque
 handles only. Without OS key storage (Linux without a keyring), keys stay
-session-only by design: no plain-text fallback exists.
+session-only by design: no plain-text fallback exists. When a seeded provider
+already exists at boot, Fairy re-vaults the `.env` key over it, so restarts on
+keyring-less machines (and key rotations in `.env`) just work.
+
+**Groq quickstart:** the Providers panel has one-click presets (Groq / OpenAI /
+OpenRouter) that fill id, base URL and model — Groq lands as
+`https://api.groq.com/openai/v1` with the current production flagship
+(`openai/gpt-oss-120b`; `llama-3.3-70b-versatile` was retired 2026-08-16).
+Paste a `gsk_…` key, tick **Included cost**, save — the key joins the pool.
+Or skip the UI entirely: put the seed block from `.env.example` (Groq example
+included) into `.env` and launch; Fairy registers the provider on boot.
 
 **New-user tip:** chat only routes to providers marked **Included cost**
 (zero-additional-spend policy). The add-provider form defaults the data scopes

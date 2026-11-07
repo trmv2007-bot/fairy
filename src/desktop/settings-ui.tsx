@@ -19,6 +19,24 @@ export const EMPTY_FORM: ProviderForm = {
   endpointId: '', baseUrl: '', apiKey: '', model: '', includedCost: false, allowedDataScopes: 'public, internal',
 };
 
+/** One-click fill for known OpenAI-compatible endpoints (v0.5). The key is still
+ *  typed by hand — presets never touch credentials. */
+export interface ProviderPreset {
+  id: string;
+  label: string;
+  endpointId: string;
+  baseUrl: string;
+  model: string;
+}
+
+export const PROVIDER_PRESETS: ProviderPreset[] = [
+  // Groq first: Master's current provider. llama-3.3-70b-versatile was retired
+  // 2026-08-16; gpt-oss-120b is the production flagship as of 2026-11.
+  { id: 'groq', label: 'Groq', endpointId: 'groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b' },
+  { id: 'openai', label: 'OpenAI', endpointId: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  { id: 'openrouter', label: 'OpenRouter', endpointId: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-oss-120b' },
+];
+
 export function formToPayload(form: ProviderForm): SaveProviderPayload {
   const model = form.model.trim();
   return {
@@ -36,6 +54,24 @@ export function SettingsPanel({ onSave, saving }: { onSave: (p: SaveProviderPayl
   const set = (patch: Partial<ProviderForm>) => setForm(f => ({ ...f, ...patch }));
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSave(formToPayload(form)); }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div>
+        <span className="f-label">Presets</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+          {PROVIDER_PRESETS.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              className="f-btn"
+              style={{ padding: '2px 10px', fontSize: 12 }}
+              title={`${p.baseUrl} · ${p.model}`}
+              aria-label={`Use ${p.label} preset`}
+              onClick={() => set({ endpointId: p.endpointId, baseUrl: p.baseUrl, model: p.model })}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <label>
         <span className="f-label">Provider id</span>
         <input className="f-input" style={{ marginTop: 3 }} value={form.endpointId} placeholder="openai" onChange={e => set({ endpointId: e.target.value })} />
